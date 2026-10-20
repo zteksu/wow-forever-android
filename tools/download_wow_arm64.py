@@ -10,6 +10,7 @@ from pathlib import Path
 CDN = "http://level3.blizzard.com/tpr/wow"
 INSTALL_DIR = Path(os.environ.get("WOW_DIR", "/Applications/World of Warcraft"))
 PLATFORM_TAGS = {"Windows", "arm64"}
+PRODUCT = os.environ.get("WOW_PRODUCT", "wow_classic_beta")
 
 
 def fetch(kind, key, byte_range=None):
@@ -73,11 +74,11 @@ def read_config(text):
 def active_row():
     lines = (INSTALL_DIR / ".build.info").read_text().splitlines()
     header = [h.split("!")[0] for h in lines[0].split("|")]
-    for line in lines[1:]:
-        row = dict(zip(header, line.split("|")))
-        if row.get("Active") == "1":
+    rows = [dict(zip(header, line.split("|"))) for line in lines[1:] if line.strip()]
+    for row in rows:
+        if row.get("Product") == PRODUCT and row.get("Active") == "1":
             return row
-    raise SystemExit("no active build in .build.info")
+    raise SystemExit(f"no active {PRODUCT} build in .build.info")
 
 
 def active_build_config():

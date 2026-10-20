@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WOW_GAME=retail syncs standard WoW for the WoW Retail app; the default is the Forever beta.
+case "${WOW_GAME:-forever}" in
+    forever) PRODUCT=wow_classic_beta FLAVOR_DIR=_classic_beta_ EXE=WowB-ARM64.exe DEFAULT_DST="WoW Forever" ;;
+    retail) PRODUCT=wow FLAVOR_DIR=_retail_ EXE=Wow-ARM64.exe DEFAULT_DST="World of Warcraft" ;;
+    *) echo "WOW_GAME must be forever or retail" >&2; exit 1 ;;
+esac
 SRC_ROOT="${WOW_SRC:-/Applications/World of Warcraft}"
-DST_ROOT="${WOW_DST:-/storage/emulated/0/WoW Forever}"
+DST_ROOT="${WOW_DST:-/storage/emulated/0/$DEFAULT_DST}"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -43,13 +49,13 @@ done < "$WORK/push.txt"
 local_build="$(cat "$SRC_ROOT/.build.info")"
 device_build="$(adb shell cat "'$DST_ROOT/.build.info'" 2>/dev/null | tr -d '\r' || true)"
 adb push "$SRC_ROOT/.build.info" "$DST_ROOT/.build.info" > /dev/null
-adb push "$SRC_ROOT/_classic_beta_/.flavor.info" "$DST_ROOT/_classic_beta_/.flavor.info" > /dev/null
+adb push "$SRC_ROOT/$FLAVOR_DIR/.flavor.info" "$DST_ROOT/$FLAVOR_DIR/.flavor.info" > /dev/null
 
 if [ "$local_build" != "$device_build" ] || [ "${FORCE_EXE:-0}" = "1" ]; then
-    WOW_DIR="$SRC_ROOT" python3 "$REPO_DIR/tools/download_wow_arm64.py" "$WORK/exe"
-    adb push "$WORK/exe/WowB-ARM64.exe" "$DST_ROOT/_classic_beta_/WowB-ARM64.exe" > /dev/null
+    WOW_DIR="$SRC_ROOT" WOW_PRODUCT="$PRODUCT" python3 "$REPO_DIR/tools/download_wow_arm64.py" "$WORK/exe"
+    adb push "$WORK/exe/$EXE" "$DST_ROOT/$FLAVOR_DIR/$EXE" > /dev/null
 else
-    echo "Build unchanged, keeping WowB-ARM64.exe"
+    echo "Build unchanged, keeping $EXE"
 fi
 
 list_device > "$WORK/device.txt"

@@ -38,8 +38,6 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.wowforever"
-
         minSdk = 26
 
         manifestPlaceholders["screenOrientation"] = "unspecified"
@@ -94,8 +92,37 @@ android {
         )
     }
 
-    flavorDimensions += "androidApi"
+    // "game" picks which World of Warcraft product the APK targets. Each game flavor is a
+    // separate app (own applicationId) so Forever and Retail can be installed side by side.
+    flavorDimensions += listOf("game", "androidApi")
     productFlavors {
+        create("forever") {
+            dimension = "game"
+            applicationId = "app.wowforever"
+            resValue("string", "app_name", "WoW Forever")
+            buildConfigField("String", "GAME_NAME", "\"WoW Forever\"")
+            buildConfigField("String", "GAME_EDITION", "\"World of Warcraft Classic Beta\"")
+            buildConfigField("String", "TARGET_PRODUCT", "\"wow_classic_beta\"")
+            buildConfigField("String", "FLAVOR_DIR", "\"_classic_beta_\"")
+            buildConfigField("String", "EXE_NAME", "\"WowB-ARM64.exe\"")
+            buildConfigField("String", "DEFAULT_GAME_FOLDER", "\"WoW Forever\"")
+            buildConfigField("String", "PORTAL", "\"test\"")
+            buildConfigField("String", "RELEASE_APK_PREFIX", "\"WoW-Forever\"")
+        }
+        create("retail") {
+            dimension = "game"
+            applicationId = "app.wowretail"
+            resValue("string", "app_name", "WoW Retail")
+            buildConfigField("String", "GAME_NAME", "\"WoW Retail\"")
+            buildConfigField("String", "GAME_EDITION", "\"World of Warcraft\"")
+            buildConfigField("String", "TARGET_PRODUCT", "\"wow\"")
+            buildConfigField("String", "FLAVOR_DIR", "\"_retail_\"")
+            buildConfigField("String", "EXE_NAME", "\"Wow-ARM64.exe\"")
+            buildConfigField("String", "DEFAULT_GAME_FOLDER", "\"World of Warcraft\"")
+            // Empty: live realms use the account region from .build.info instead of a fixed portal.
+            buildConfigField("String", "PORTAL", "\"\"")
+            buildConfigField("String", "RELEASE_APK_PREFIX", "\"WoW-Retail\"")
+        }
         create("modern") {
             dimension = "androidApi"
             minSdk = 29

@@ -65,7 +65,7 @@ class AppUpdaterTest {
             }
         """.trimIndent()
 
-        val release = AppUpdater.parseRelease(json, "2.1.2")
+        val release = AppUpdater.parseRelease(json, "2.1.2", "WoW-Forever")
 
         assertNotNull(release)
         assertEquals("2.1.3", release?.version)
@@ -73,6 +73,31 @@ class AppUpdaterTest {
         assertEquals("Bug fixes and improvements", release?.notes)
         assertEquals("https://github.com/jaredgei/wow-forever-android/releases/download/v2.1.3/WoW-Forever.apk", release?.downloadUrl)
         assertEquals(160000000L, release?.sizeBytes)
+    }
+
+    @Test
+    fun parseRelease_multiGameRelease_picksOwnApk() {
+        val json = """
+            {
+                "tag_name": "v2.3.0",
+                "name": "v2.3.0",
+                "assets": [
+                    {
+                        "name": "WoW-Forever.apk",
+                        "browser_download_url": "https://example.com/WoW-Forever.apk",
+                        "size": 1
+                    },
+                    {
+                        "name": "WoW-Retail.apk",
+                        "browser_download_url": "https://example.com/WoW-Retail.apk",
+                        "size": 2
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        assertEquals("https://example.com/WoW-Forever.apk", AppUpdater.parseRelease(json, "2.2.6", "WoW-Forever")?.downloadUrl)
+        assertEquals("https://example.com/WoW-Retail.apk", AppUpdater.parseRelease(json, "2.2.6", "WoW-Retail")?.downloadUrl)
     }
 
     @Test
@@ -92,7 +117,7 @@ class AppUpdaterTest {
             }
         """.trimIndent()
 
-        assertNull(AppUpdater.parseRelease(json, "2.1.2"))
+        assertNull(AppUpdater.parseRelease(json, "2.1.2", "WoW-Forever"))
     }
 
     @Test
@@ -112,11 +137,11 @@ class AppUpdaterTest {
             }
         """.trimIndent()
 
-        assertNull(AppUpdater.parseRelease(json, "2.1.2"))
+        assertNull(AppUpdater.parseRelease(json, "2.1.2", "WoW-Forever"))
     }
 
     @Test
     fun parseRelease_invalidJson_returnsNull() {
-        assertNull(AppUpdater.parseRelease("not-json", "2.1.2"))
+        assertNull(AppUpdater.parseRelease("not-json", "2.1.2", "WoW-Forever"))
     }
 }

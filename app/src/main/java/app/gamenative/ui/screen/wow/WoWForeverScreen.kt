@@ -170,7 +170,7 @@ fun WoWForeverScreen(
     fun checkFiles(): Boolean {
         files = GamePath.status(context, gamePath)
         if (files.isWrongGame) {
-            errorMessage = "Incompatible game (${files.product}). WoW Forever requires World of Warcraft Classic Beta ($TARGET_PRODUCT)."
+            errorMessage = "Incompatible game (${files.product}). ${BuildConfig.GAME_NAME} requires ${BuildConfig.GAME_EDITION} ($TARGET_PRODUCT)."
         }
         return files.isReady
     }
@@ -214,7 +214,7 @@ fun WoWForeverScreen(
                 statusText = READY_STATUS
                 denyStorageAccess()
             } catch (e: Exception) {
-                Timber.e(e, "Error launching WoW Forever")
+                Timber.e(e, "Error launching ${BuildConfig.GAME_NAME}")
                 errorMessage = e.message ?: "Launch failed"
                 statusText = "Launch failed"
                 isLaunching = false
@@ -627,7 +627,7 @@ fun WoWForeverScreen(
             title = { Text(text = "Storage Permission Required", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = WowGold) },
             text = {
                 Text(
-                    text = "Android requires 'All files access' for WoW Forever to read and update game files in this directory.\n\nPlease enable 'Allow access to manage all files' on the next screen.",
+                    text = "Android requires 'All files access' for ${BuildConfig.GAME_NAME} to read and update game files in this directory.\n\nPlease enable 'Allow access to manage all files' on the next screen.",
                     fontSize = 13.sp,
                     color = Color(0xFFE2E8F0),
                     lineHeight = 18.sp
@@ -743,7 +743,7 @@ fun WoWForeverScreen(
             },
             text = {
                 Text(
-                    text = "Android requires permission to install apps from WoW Forever.\n\nPlease enable 'Allow from this source' on the next screen.",
+                    text = "Android requires permission to install apps from ${BuildConfig.GAME_NAME}.\n\nPlease enable 'Allow from this source' on the next screen.",
                     fontSize = 13.sp,
                     color = Color(0xFFE2E8F0),
                     lineHeight = 18.sp,
@@ -777,7 +777,7 @@ object GamePath {
     private const val PREFS = "wow_forever"
     private const val KEY_GAME_PATH = "game_path"
 
-    private val defaultPath = File(Environment.getExternalStorageDirectory(), "WoW Forever")
+    private val defaultPath = File(Environment.getExternalStorageDirectory(), BuildConfig.DEFAULT_GAME_FOLDER)
 
     data class Status(
         val exeExists: Boolean = false,
@@ -815,7 +815,7 @@ object GamePath {
         path.isNotEmpty() && status(context, path).let { it.isReady && it.product == TARGET_PRODUCT }
 
     fun findGameRoot(picked: File): File? =
-        sequenceOf(picked, picked.parentFile, File(picked, "WoW Forever"), File(picked, "World of Warcraft"))
+        sequenceOf(picked, picked.parentFile, File(picked, BuildConfig.DEFAULT_GAME_FOLDER), File(picked, "World of Warcraft"))
             .filterNotNull()
             .firstOrNull { File(it, BUILD_INFO).isFile }
 
@@ -940,6 +940,10 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
             if (!arm64Exe.exists()) throw IllegalStateException("Couldn't download $EXE_NAME: ${e.message}", e)
             Timber.w(e, "Client update check failed, launching the existing $EXE_NAME")
         }
+        check(arm64Exe.exists()) {
+            val found = arm64Exe.parentFile?.list { _, name -> name.endsWith(".exe", ignoreCase = true) }.orEmpty()
+            "Downloaded client has no $EXE_NAME (found: ${found.joinToString().ifEmpty { "none" }})"
+        }
     }
 
     onStatus("Configuring ${gpu.label} container...")
@@ -962,7 +966,7 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
     val envVars = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact,deck_emu MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=0 MESA_VK_WSI_PRESENT_MODE=mailbox TU_DEBUG=${gpu.tuDebug} VKD3D_SHADER_MODEL=6_0 PULSE_LATENCY_MSEC=144$samsungEnv"
     return JSONObject().apply {
         put("id", CONTAINER_ID)
-        put("name", "WoW Forever")
+        put("name", BuildConfig.GAME_NAME)
         put("screenSize", screenSize)
         put("envVars", envVars)
         put("graphicsDriver", "Wrapper")
@@ -974,7 +978,7 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
         put("wineVersion", "$PROTON_VERSION-1")
         put("containerVariant", "bionic")
         put("fexcoreVersion", "2609-0")
-        put("drives", "D:/storage/emulated/0/DownloadE:/data/data/app.wowforever/storageG:${gameRoot.path}")
+        put("drives", "D:/storage/emulated/0/DownloadE:/data/data/${BuildConfig.APPLICATION_ID}/storageG:${gameRoot.path}")
         put("executablePath", "G:\\$FLAVOR_DIR\\$EXE_NAME")
         put("execArgs", "-d3d11")
         put("showFPS", true)
@@ -985,7 +989,6 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
 }
 
 private val CONFIG_DEFAULTS = linkedMapOf(
-    "portal" to "\"test\"",
     "agentUID" to "\"$TARGET_PRODUCT\"",
     "gxApi" to "\"D3D11\"",
     "textLocale" to "\"enUS\"",
@@ -1028,7 +1031,8 @@ private fun ensureGameConfig(root: File, screenSize: String) {
     val configWtf = File(flavorDir, "WTF/Config.wtf")
     if (!configWtf.exists()) {
         configWtf.parentFile?.mkdirs()
-        val defaults = CONFIG_DEFAULTS + RESOLUTION_KEYS.associateWith { "\"$screenSize\"" }
+        val portal = portalOf(root)?.let { mapOf("portal" to "\"$it\"") }.orEmpty()
+        val defaults = portal + CONFIG_DEFAULTS + RESOLUTION_KEYS.associateWith { "\"$screenSize\"" }
         configWtf.writeText(defaults.entries.joinToString("\n") { "SET ${it.key} ${it.value}" } + "\n")
         return
     }
@@ -1046,6 +1050,11 @@ private fun ensureGameConfig(root: File, screenSize: String) {
         configWtf.writeText(updated.joinToString("\n") + "\n")
     }
 }
+
+// Forever's beta realms live on the "test" portal. Retail has none fixed, so use the install's region (US, EU, ...).
+private fun portalOf(root: File): String? =
+    BuildConfig.PORTAL.ifBlank { WowClientDownloader.readBuildInfo(File(root, BUILD_INFO))?.get("Region").orEmpty().uppercase() }
+        .takeIf { it.isNotBlank() }
 
 private val RESOLUTION_KEYS = listOf("gxFullscreenResolution", "gxWindowedResolution")
 

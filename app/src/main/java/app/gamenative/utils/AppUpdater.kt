@@ -42,7 +42,12 @@ object AppUpdater {
         return false
     }
 
-    fun parseRelease(jsonString: String, currentVersion: String = BuildConfig.VERSION_NAME): Release? = runCatching {
+    // Releases carry one APK per game (WoW-Forever.apk, WoW-Retail.apk), so only take this build's own.
+    fun parseRelease(
+        jsonString: String,
+        currentVersion: String = BuildConfig.VERSION_NAME,
+        apkPrefix: String = BuildConfig.RELEASE_APK_PREFIX,
+    ): Release? = runCatching {
         val json = JSONObject(jsonString)
         val tag = json.optString("tag_name")
         if (!isNewer(tag, currentVersion)) return null
@@ -52,7 +57,7 @@ object AppUpdater {
             val asset = assets.optJSONObject(i) ?: continue
             val name = asset.optString("name")
             val url = asset.optString("browser_download_url")
-            if (name.endsWith(".apk", ignoreCase = true) && url.isNotBlank()) {
+            if (name.startsWith(apkPrefix, ignoreCase = true) && name.endsWith(".apk", ignoreCase = true) && url.isNotBlank()) {
                 return Release(
                     version = tag.trimStart('v', 'V'),
                     name = json.optString("name", tag),
@@ -69,7 +74,7 @@ object AppUpdater {
         runCatching {
             val request = Request.Builder()
                 .url(RELEASES_URL)
-                .header("User-Agent", "WoW-Forever-Android")
+                .header("User-Agent", "${BuildConfig.RELEASE_APK_PREFIX}-Android")
                 .header("Accept", "application/vnd.github+json")
                 .build()
             Net.http.newCall(request).execute().use { response ->
@@ -89,7 +94,7 @@ object AppUpdater {
         onProgress: (Float) -> Unit,
     ): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-        val dest = File(dir, "WoW-Forever-${release.version}.apk")
+        val dest = File(dir, "${BuildConfig.RELEASE_APK_PREFIX}-${release.version}.apk")
         if (dest.exists() && dest.length() == release.sizeBytes && release.sizeBytes > 0) {
             onProgress(1f)
             return@withContext dest

@@ -1,5 +1,6 @@
 package app.gamenative.ui.screen.wow
 
+import app.gamenative.BuildConfig
 import app.gamenative.utils.Net
 import okhttp3.Request
 import java.io.ByteArrayOutputStream
@@ -14,9 +15,9 @@ import java.util.zip.Inflater
 import timber.log.Timber
 
 object WowClientDownloader {
-    const val FLAVOR_DIR = "_classic_beta_"
-    const val EXE_NAME = "WowB-ARM64.exe"
-    const val TARGET_PRODUCT = "wow_classic_beta"
+    const val FLAVOR_DIR = BuildConfig.FLAVOR_DIR
+    const val EXE_NAME = BuildConfig.EXE_NAME
+    const val TARGET_PRODUCT = BuildConfig.TARGET_PRODUCT
     const val BUILD_INFO = ".build.info"
     private const val PLATFORM_ARCH = "arm64"
     private const val EXCLUDED_ARCH = "x86_64"
@@ -71,7 +72,10 @@ object WowClientDownloader {
             Timber.w("checkVersion: response body is null or unsuccessful")
             return null
         }
-        val remoteRow = parsePsv(versions).firstOrNull()
+        // Retail publishes one row per region (us, eu, kr, ...), so match the install's own region.
+        val region = row["Region"].orEmpty()
+        val remoteRows = parsePsv(versions)
+        val remoteRow = remoteRows.firstOrNull { it["Region"] == region } ?: remoteRows.firstOrNull()
             ?: run {
                 Timber.w("checkVersion: no remote row in $versions")
                 return null
@@ -84,7 +88,7 @@ object WowClientDownloader {
         val remoteBuildKey = remoteRow["BuildConfig"].orEmpty()
 
         val cdns = runCatching { fetchText("$PATCH_URL/cdns") }.getOrNull()?.let(::parsePsv).orEmpty()
-        val cdnsRow = cdns.firstOrNull { it["Name"] == "us" } ?: cdns.firstOrNull()
+        val cdnsRow = cdns.firstOrNull { it["Name"] == region } ?: cdns.firstOrNull { it["Name"] == "us" } ?: cdns.firstOrNull()
 
         val isOutdated = localVersion != remoteVersion || (remoteBuildKey.isNotBlank() && localBuildKey != remoteBuildKey)
         Timber.i("checkVersion: localVersion=$localVersion, remoteVersion=$remoteVersion, isOutdated=$isOutdated")

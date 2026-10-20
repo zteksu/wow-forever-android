@@ -109,9 +109,25 @@ Requirements: JDK 17 and the Android SDK (with build-tools and platform-tools).
 
 ```bash
 tools/fetch_components.sh           # Wine/Proton, DXVK and Turnip archives (~130 MB, not in git)
-./gradlew assembleModernRelease     # app/build/outputs/apk/modern/release/app-modern-release.apk
-./gradlew assembleModernDebug       # unminified debug build, faster to iterate on
+./gradlew assembleForeverModernRelease   # WoW Forever: app/build/outputs/apk/foreverModern/release/
+./gradlew assembleRetailModernRelease    # WoW Retail:  app/build/outputs/apk/retailModern/release/
+./gradlew assembleForeverModernDebug     # unminified debug build, faster to iterate on
 ```
+
+### WoW Retail build
+
+The same code also builds **WoW Retail**, an APK for standard (retail) World of Warcraft. The `game` product flavor in `app/build.gradle.kts` picks the target:
+
+| | WoW Forever | WoW Retail |
+| :--- | :--- | :--- |
+| Package | `app.wowforever` | `app.wowretail` (installs alongside Forever) |
+| Battle.net product | `wow_classic_beta` | `wow` |
+| Client folder / exe | `_classic_beta_/WowB-ARM64.exe` | `_retail_/Wow-ARM64.exe` |
+| Default game folder | `WoW Forever/` | `World of Warcraft/` |
+| `portal` CVar | `test` | Region from `.build.info` (`US`, `EU`, ...) |
+| Release asset | `WoW-Forever.apk` | `WoW-Retail.apk` |
+
+Copy `.build.info` and `Data/` from a retail install, or run `WOW_GAME=retail tools/sync_wow_to_device.sh`. Retail data is well over 100 GB, and retail is much heavier on the GPU than Forever, so expect lower settings and frame rates. Each app's self-updater only picks its own APK from a GitHub release, so both APKs can go on the same release.
 
 Release builds are signed with `app/keystores/keystore.properties` when it exists (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`). Otherwise they fall back to the debug key. Builds signed with different keys can't update each other, so switching between them means uninstalling first.
 

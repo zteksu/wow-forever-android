@@ -3,6 +3,8 @@ package com.winlator.core;
 import android.content.Context;
 import android.util.Log;
 
+import app.gamenative.BuildConfig;
+
 import com.winlator.container.Container;
 import com.winlator.fexcore.FEXCoreManager;
 import com.winlator.xenvironment.ImageFs;
@@ -45,7 +47,7 @@ public abstract class WineUtils {
                 missingDrives += "D:" + android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
             }
             if (!currentDrives.contains("E:")) {
-                missingDrives += "E:/data/data/app.wowforever/storage";
+                missingDrives += "E:/data/data/" + BuildConfig.APPLICATION_ID + "/storage";
             }
             String updatedDrives = missingDrives + currentDrives;
             container.setDrives(updatedDrives);
@@ -57,7 +59,7 @@ public abstract class WineUtils {
         for (String[] drive : container.drivesIterator()) {
             File linkTarget = new File(drive[1]);
             String path = linkTarget.getAbsolutePath();
-            if (!linkTarget.isDirectory() && path.endsWith("/app.wowforever/storage")) {
+            if (!linkTarget.isDirectory() && path.endsWith("/" + BuildConfig.APPLICATION_ID + "/storage")) {
                 linkTarget.mkdirs();
                 FileUtils.chmod(linkTarget, 0771);
             }
