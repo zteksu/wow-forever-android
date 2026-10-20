@@ -1053,7 +1053,7 @@ private fun ensureGameConfig(root: File, screenSize: String) {
 
 // Forever's beta realms live on the "test" portal. Retail has none fixed, so use the install's region (US, EU, ...).
 private fun portalOf(root: File): String? =
-    BuildConfig.PORTAL.ifBlank { WowClientDownloader.readBuildInfo(File(root, BUILD_INFO))?.get("Region").orEmpty().uppercase() }
+    BuildConfig.PORTAL.ifBlank { WowClientDownloader.readBuildInfo(File(root, BUILD_INFO))?.get("Branch").orEmpty().uppercase() }
         .takeIf { it.isNotBlank() }
 
 private val RESOLUTION_KEYS = listOf("gxFullscreenResolution", "gxWindowedResolution")

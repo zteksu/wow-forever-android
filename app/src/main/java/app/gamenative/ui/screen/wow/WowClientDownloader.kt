@@ -72,8 +72,8 @@ object WowClientDownloader {
             Timber.w("checkVersion: response body is null or unsuccessful")
             return null
         }
-        // Retail publishes one row per region (us, eu, kr, ...), so match the install's own region.
-        val region = row["Region"].orEmpty()
+        // Retail publishes one row per region (us, eu, kr, ...). .build.info keeps the install's region in "Branch".
+        val region = row["Branch"].orEmpty()
         val remoteRows = parsePsv(versions)
         val remoteRow = remoteRows.firstOrNull { it["Region"] == region } ?: remoteRows.firstOrNull()
             ?: run {
