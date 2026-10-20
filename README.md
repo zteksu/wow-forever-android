@@ -127,7 +127,7 @@ The same code also builds **WoW Retail**, an APK for standard (retail) World of 
 | `portal` CVar | `test` | Region from `.build.info` (`US`, `EU`, ...) |
 | Release asset | `WoW-Forever.apk` | `WoW-Retail.apk` |
 
-Copy `.build.info` and `Data/` from a retail install, or run `WOW_GAME=retail tools/sync_wow_to_device.sh`. Retail data is well over 100 GB, and retail is much heavier on the GPU than Forever, so expect lower settings and frame rates. Each app's self-updater only picks its own APK from a GitHub release, so both APKs can go on the same release.
+Retail has its own launcher icon in `app/src/retail/res` (original artwork, regenerate it with `tools/make_retail_icon.py`). Copy `.build.info` and `Data/` from a retail install, or run `WOW_GAME=retail tools/sync_wow_to_device.sh`. Retail data is well over 100 GB, and retail is much heavier on the GPU than Forever, so expect lower settings and frame rates. Each app's self-updater only picks its own APK from a GitHub release, so both APKs can go on the same release.
 
 Release builds are signed with `app/keystores/keystore.properties` when it exists (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`). Otherwise they fall back to the debug key. Builds signed with different keys can't update each other, so switching between them means uninstalling first.
 
