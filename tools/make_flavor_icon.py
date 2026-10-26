@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Draws the WoW Retail launcher icon set into app/src/retail/res.
+"""Draws a game flavor's launcher icon set into app/src/<flavor>/res.
 
-Original artwork (no Blizzard assets): a gold-rimmed sapphire medallion with
-"WoW" and a "RETAIL" ribbon, in the same dark/gold palette as the Forever icon.
+Usage: make_flavor_icon.py [retail|octo] [font.ttf]
+
+Original artwork (no Blizzard assets): a gold-rimmed medallion with "WoW" and a
+ribbon naming the flavor, in the same dark/gold palette as the Forever icon.
 Needs Pillow. Pass a bold serif .ttf to use a different font.
 """
 import math
@@ -12,8 +14,16 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 REPO = Path(__file__).resolve().parent.parent
-RES = REPO / "app/src/retail/res"
-FONT = sys.argv[1] if len(sys.argv) > 1 else "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
+FLAVOR = sys.argv[1] if len(sys.argv) > 1 else "retail"
+FONT = sys.argv[2] if len(sys.argv) > 2 else "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
+RES = REPO / f"app/src/{FLAVOR}/res"
+
+# Ribbon text and the medallion face colour, from centre (t=0) to rim (t=1).
+FLAVORS = {
+    "retail": ("RETAIL", lambda t: (40 - 32 * t, 150 - 115 * t, 215 - 140 * t)),  # sapphire
+    "octo": ("OCTO", lambda t: (34 - 26 * t, 168 - 120 * t, 138 - 96 * t)),  # teal
+}
+RIBBON, FACE = FLAVORS[FLAVOR]
 BACKGROUND = (0x0A, 0x0E, 0x17)
 S = 1024  # working canvas = the full 108dp adaptive-icon foreground
 
@@ -101,7 +111,7 @@ def emblem():
             r = math.hypot(x - c, y - c + 60) / 290
             if math.hypot(x - c, y - c) <= 226:
                 t = min(r, 1.0)
-                fp[x, y] = (round(40 - 32 * t), round(150 - 115 * t), round(215 - 140 * t), 255)
+                fp[x, y] = tuple(round(v) for v in FACE(t)) + (255,)
     img.alpha_composite(face)
 
     # A thin gold inner ring framing the face.
@@ -118,7 +128,7 @@ def emblem():
     img.paste(Image.new("RGBA", (S, S), (40, 24, 10, 255)), (0, 0), outline)
     paint(img, wow, GOLD)
 
-    # "RETAIL" ribbon across the lower half, with notched tails.
+    # Flavor ribbon across the lower half, with notched tails.
     top, bottom = c + 70, c + 180
     half = 268  # keeps the ribbon corners inside a circular launcher mask
     notch = 30
@@ -135,9 +145,9 @@ def emblem():
     paint(img, band, BRONZE)
 
     small = ImageFont.truetype(FONT, 72)
-    retail = text_mask("RETAIL", small, (c, (top + bottom) / 2 + 2), tracking=8)
-    img.paste(Image.new("RGBA", (S, S), (40, 24, 10, 255)), (0, 0), retail.filter(ImageFilter.MaxFilter(7)))
-    paint(img, retail, GOLD)
+    label = text_mask(RIBBON, small, (c, (top + bottom) / 2 + 2), tracking=8)
+    img.paste(Image.new("RGBA", (S, S), (40, 24, 10, 255)), (0, 0), label.filter(ImageFilter.MaxFilter(7)))
+    paint(img, label, GOLD)
     return img
 
 
@@ -181,7 +191,7 @@ def main():
     (RES / "drawable").mkdir(parents=True, exist_ok=True)
     banner.save(RES / "drawable/ic_banner.png", optimize=True)
 
-    full.resize((512, 512), Image.LANCZOS).save(REPO / "app/src/retail/ic_launcher-playstore.png", optimize=True)
+    full.resize((512, 512), Image.LANCZOS).save(REPO / f"app/src/{FLAVOR}/ic_launcher-playstore.png", optimize=True)
 
 
 if __name__ == "__main__":

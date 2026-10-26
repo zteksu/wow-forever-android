@@ -77,6 +77,10 @@ object WoWLauncherState {
 }
 
 private const val CONTAINER_ID = "wow_forever"
+private const val REALMLIST = "realmlist.wtf"
+
+// The file that marks a folder as a game install: Blizzard clients have .build.info, MPQ clients only the exe.
+private val INSTALL_MARKER = if (BuildConfig.MPQ_CLIENT) EXE_NAME else BUILD_INFO
 private const val READY_STATUS = "Ready to launch"
 
 @Composable
@@ -91,7 +95,7 @@ fun WoWForeverScreen(
     var files by remember { mutableStateOf(GamePath.Status()) }
     var isLaunching by remember { mutableStateOf(false) }
     var launchJob by remember { mutableStateOf<Job?>(null) }
-    var hasSavedLogin by remember { mutableStateOf(BattleNetSignIn.load(context) != null) }
+    var hasSavedLogin by remember { mutableStateOf(BuildConfig.MPQ_CLIENT || BattleNetSignIn.load(context) != null) }
     var showLoginDialog by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -260,7 +264,7 @@ fun WoWForeverScreen(
         val path = StorageUtils.getPathFromTreeUri(context, uri) ?: return@rememberLauncherForActivityResult
         val root = GamePath.findGameRoot(File(path))
         if (root == null) {
-            errorMessage = "No $BUILD_INFO found in $path. Pick the folder that contains $BUILD_INFO and Data/."
+            errorMessage = "No $INSTALL_MARKER found in $path. Pick the folder that contains $INSTALL_MARKER and Data/."
             return@rememberLauncherForActivityResult
         }
         errorMessage = null
@@ -390,17 +394,25 @@ fun WoWForeverScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CheckItem(label = if (files.exeExists) "ARM64 Binary ($EXE_NAME)" else "ARM64 Binary (downloads on Play)", ready = files.exeExists)
-                        CheckItem(label = "Game Asset Archives (Data/)", ready = files.dataExists)
-                        CheckItem(
-                            label = if (files.isWrongGame) "Install Info ($BUILD_INFO - requires $TARGET_PRODUCT)" else "Install Info ($BUILD_INFO)",
-                            ready = files.buildInfoExists && !files.isWrongGame
-                        )
+                        if (BuildConfig.MPQ_CLIENT) {
+                            CheckItem(label = "Game Client ($EXE_NAME)", ready = files.exeExists)
+                            CheckItem(label = "Game Asset Archives (Data/)", ready = files.dataExists)
+                            CheckItem(label = "Realm List ($REALMLIST)", ready = files.realmlistExists)
+                        } else {
+                            CheckItem(label = if (files.exeExists) "ARM64 Binary ($EXE_NAME)" else "ARM64 Binary (downloads on Play)", ready = files.exeExists)
+                            CheckItem(label = "Game Asset Archives (Data/)", ready = files.dataExists)
+                            CheckItem(
+                                label = if (files.isWrongGame) "Install Info ($BUILD_INFO - requires $TARGET_PRODUCT)" else "Install Info ($BUILD_INFO)",
+                                ready = files.buildInfoExists && !files.isWrongGame
+                            )
+                        }
                         CheckItem(label = "All Files Access Permission", ready = files.hasStorageAccess)
-                        CheckItem(
-                            label = if (hasSavedLogin) "Battle.net Login (Configured)" else "Battle.net Login (Configure below play button)",
-                            ready = hasSavedLogin,
-                        )
+                        if (!BuildConfig.MPQ_CLIENT) {
+                            CheckItem(
+                                label = if (hasSavedLogin) "Battle.net Login (Configured)" else "Battle.net Login (Configure below play button)",
+                                ready = hasSavedLogin,
+                            )
+                        }
                         appUpdate?.let {
                             CheckItem(
                                 label = "App Build: v${BuildConfig.VERSION_NAME} (v${it.version} available)",
@@ -568,7 +580,7 @@ fun WoWForeverScreen(
                             onClick = { StorageUtils.requestManageExternalStoragePermission(context) },
                         )
                         else -> PrimaryButton(
-                            text = if (files.isWrongGame) "FOREVER BETA REQUIRED" else "PLAY WORLD OF WARCRAFT",
+                            text = if (files.isWrongGame) "${BuildConfig.GAME_EDITION.uppercase()} REQUIRED" else if (BuildConfig.MPQ_CLIENT) "PLAY ${BuildConfig.GAME_NAME.uppercase()}" else "PLAY WORLD OF WARCRAFT",
                             icon = Icons.Default.PlayArrow,
                             enabled = canPlay,
                             onClick = ::launchGame,
@@ -589,13 +601,15 @@ fun WoWForeverScreen(
                         if (!filesMissing) {
                             LinkButton("Change Location", Icons.Default.FolderOpen) { folderPicker.launch(null) }
                         }
-                        LinkButton(
-                            text = if (hasSavedLogin) "Update Login" else "Configure Login",
-                            icon = Icons.Default.Key,
-                        ) {
-                            showLoginDialog = true
+                        if (!BuildConfig.MPQ_CLIENT) {
+                            LinkButton(
+                                text = if (hasSavedLogin) "Update Login" else "Configure Login",
+                                icon = Icons.Default.Key,
+                            ) {
+                                showLoginDialog = true
+                            }
                         }
-                        if (hasSavedLogin) {
+                        if (hasSavedLogin && !BuildConfig.MPQ_CLIENT) {
                             LinkButton("Forget Saved Login", Icons.Default.Delete) {
                                 BattleNetSignIn.forget(context)
                                 BattleNetSignIn.removeLoginFile(File(gamePath))
@@ -779,12 +793,14 @@ object GamePath {
 
     private val defaultPath = File(Environment.getExternalStorageDirectory(), BuildConfig.DEFAULT_GAME_FOLDER)
 
+    // buildInfoExists means "the install marker exists": .build.info for Blizzard clients, the exe for MPQ clients.
     data class Status(
         val exeExists: Boolean = false,
         val dataExists: Boolean = false,
         val buildInfoExists: Boolean = false,
         val product: String = "",
         val hasStorageAccess: Boolean = true,
+        val realmlistExists: Boolean = false,
     ) {
         val isWrongGame get() = buildInfoExists && product.isNotBlank() && product != TARGET_PRODUCT
         val isReady get() = exeExists && dataExists && buildInfoExists && hasStorageAccess && !isWrongGame
@@ -795,15 +811,16 @@ object GamePath {
         return Status(
             exeExists = File(root, "$FLAVOR_DIR/$EXE_NAME").exists(),
             dataExists = File(root, "Data").listFiles()?.isNotEmpty() == true,
-            buildInfoExists = File(root, BUILD_INFO).isFile,
+            buildInfoExists = File(root, INSTALL_MARKER).isFile,
             product = productOf(root).orEmpty(),
             hasStorageAccess = StorageUtils.hasStoragePermission(context, path),
+            realmlistExists = File(root, REALMLIST).isFile,
         )
     }
 
     fun load(context: Context): String {
         val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_GAME_PATH, null)?.let(::File)
-        val usable = listOfNotNull(saved, defaultPath).firstOrNull { productOf(it) == TARGET_PRODUCT }
+        val usable = listOfNotNull(saved, defaultPath).firstOrNull(::isGameRoot)
         return (usable ?: saved ?: defaultPath).absolutePath
     }
 
@@ -812,12 +829,15 @@ object GamePath {
     }
 
     fun isReady(context: Context, path: String = load(context)): Boolean =
-        path.isNotEmpty() && status(context, path).let { it.isReady && it.product == TARGET_PRODUCT }
+        path.isNotEmpty() && status(context, path).let { it.isReady && (BuildConfig.MPQ_CLIENT || it.product == TARGET_PRODUCT) }
 
     fun findGameRoot(picked: File): File? =
         sequenceOf(picked, picked.parentFile, File(picked, BuildConfig.DEFAULT_GAME_FOLDER), File(picked, "World of Warcraft"))
             .filterNotNull()
-            .firstOrNull { File(it, BUILD_INFO).isFile }
+            .firstOrNull { File(it, INSTALL_MARKER).isFile }
+
+    private fun isGameRoot(root: File) =
+        if (BuildConfig.MPQ_CLIENT) File(root, EXE_NAME).isFile else productOf(root) == TARGET_PRODUCT
 
     private fun productOf(root: File) = WowClientDownloader.readBuildInfo(File(root, BUILD_INFO))?.get("Product")
 }
@@ -920,9 +940,14 @@ internal fun fitScreenSize(baseSize: String, windowWidth: Int, windowHeight: Int
 private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, screenSize: String, onStatus: (String) -> Unit): String {
     installBundledComponents(context, onStatus)
 
-    check(File(gameRoot, BUILD_INFO).exists()) { "Missing $BUILD_INFO in $gameRoot. Copy it from your WoW install." }
+    check(File(gameRoot, INSTALL_MARKER).exists()) { "Missing $INSTALL_MARKER in $gameRoot. Copy it from your WoW install." }
     try {
-        ensureGameConfig(gameRoot, screenSize)
+        if (BuildConfig.MPQ_CLIENT) {
+            MpqClient.ensureGameConfig(gameRoot, screenSize)
+            MpqClient.installControllerAddon(context, gameRoot)
+        } else {
+            ensureGameConfig(gameRoot, screenSize)
+        }
     } catch (e: Exception) {
         if (e.isPermissionDenied()) throw StorageAccessDeniedException(e)
         throw e
@@ -958,6 +983,7 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
         container.saveData()
     }
     check(containerManager.hasContainer(CONTAINER_ID)) { "Container creation failed. Check system storage and logs." }
+    if (BuildConfig.MPQ_CLIENT) containerManager.getContainerById(CONTAINER_ID)?.let { MpqClient.applyControllerProfile(context, it) }
     return CONTAINER_ID
 }
 
@@ -979,8 +1005,16 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
         put("containerVariant", "bionic")
         put("fexcoreVersion", "2609-0")
         put("drives", "D:/storage/emulated/0/DownloadE:/data/data/${BuildConfig.APPLICATION_ID}/storageG:${gameRoot.path}")
-        put("executablePath", "G:\\$FLAVOR_DIR\\$EXE_NAME")
-        put("execArgs", "-d3d11")
+        if (BuildConfig.MPQ_CLIENT) {
+            // 32-bit x86 client: emulate it with the bundled wowbox64. It renders through the DXVK
+            // d3d9.dll in its own folder, which Wine prefers over the builtin one (d3d9=native,builtin).
+            put("emulator", "wowbox64")
+            put("executablePath", "G:\\${MpqClient.launchExe(gameRoot)}")
+            put("execArgs", "")
+        } else {
+            put("executablePath", "G:\\$FLAVOR_DIR\\$EXE_NAME")
+            put("execArgs", "-d3d11")
+        }
         put("showFPS", true)
         put("startupSelection", Container.STARTUP_SELECTION_AGGRESSIVE.toInt())
         put("wow64Mode", true)

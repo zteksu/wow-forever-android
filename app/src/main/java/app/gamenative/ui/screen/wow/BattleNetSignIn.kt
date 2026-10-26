@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import app.gamenative.BuildConfig
 import app.gamenative.Crypto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +69,8 @@ object BattleNetSignIn {
     }
 
     fun removeLoginFile(gameRoot: File) {
+        // MPQ clients never get a login.txt, and their client folder is the game root, so leave its files alone.
+        if (BuildConfig.MPQ_CLIENT) return
         try {
             val file = File(File(gameRoot, WowClientDownloader.FLAVOR_DIR), "login.txt")
             if (file.exists()) {

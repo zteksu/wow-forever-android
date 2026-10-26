@@ -127,9 +127,17 @@ The same code also builds **WoW Retail**, an APK for standard (retail) World of 
 | `portal` CVar | `test` | Region from `.build.info` (`US`, `EU`, ...) |
 | Release asset | `WoW-Forever.apk` | `WoW-Retail.apk` |
 
-Retail has its own launcher icon in `app/src/retail/res` (original artwork, regenerate it with `tools/make_retail_icon.py`). Copy `.build.info` and `Data/` from a retail install, or run `WOW_GAME=retail tools/sync_wow_to_device.sh`. Retail data is well over 100 GB, and retail is much heavier on the GPU than Forever, so expect lower settings and frame rates. Each app's self-updater only picks its own APK from a GitHub release, so both APKs can go on the same release.
+Retail has its own launcher icon in `app/src/retail/res` (original artwork, regenerate it with `tools/make_flavor_icon.py retail`). Copy `.build.info` and `Data/` from a retail install, or run `WOW_GAME=retail tools/sync_wow_to_device.sh`. Retail data is well over 100 GB, and retail is much heavier on the GPU than Forever, so expect lower settings and frame rates. Each app's self-updater only picks its own APK from a GitHub release, so both APKs can go on the same release.
 
 Release builds are signed with `app/keystores/keystore.properties` when it exists (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`). Otherwise they fall back to the debug key. Builds signed with different keys can't update each other, so switching between them means uninstalling first.
+
+### OctoWoW build
+
+`./gradlew assembleOctoModernRelease` builds **OctoWoW** (`app.octowow`) for the [OctoWoW](https://octowow.st) vanilla 1.12 private server. Its client is different from Blizzard's current clients, so this build:
+
+- Expects the OctoWoW client folder as-is (`WoW.exe`, `Data/`, `realmlist.wtf`, `WTF/`) in `OctoWoW/` on the device. There is no `.build.info`, Blizzard updater or Battle.net login.
+- Runs the 32-bit x86 client through the bundled wowbox64 emulator. It launches `VanillaFixes.exe` when present, so the client mods in `dlls.txt` load, and `WoW.exe` otherwise. Rendering uses the DXVK `d3d9.dll` and `dxvk.conf` shipped in the client folder.
+- Installs the [ShaguController](https://github.com/shagu/ShaguController) addon into `Interface/AddOns/` and maps the controller to the keys it expects: left stick moves, right stick moves the mouse, L2/R2 are right/left click, A jumps, Y/X/B and the D-pad are action buttons, L1/R1 cycle targets, Select opens the map, Start is Escape, L3 opens bags and R3 the quest log.
 
 `fetch_components.sh` downloads the three runtime archives from this repo's `components-v1` release and checks them against `tools/components.sha256`. If you already have them, pass a folder instead: `tools/fetch_components.sh /path/to/components`.
 

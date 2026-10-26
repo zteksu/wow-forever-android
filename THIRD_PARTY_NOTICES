@@ -457,3 +457,15 @@ This project bundles `app/src/main/lib/perfsdk-v1.0.0.jar`, the Samsung Performa
 power-control feature. The SDK is proprietary to Samsung Electronics and is NOT covered by
 this project's GPL-3.0 license; it is used under the terms of Samsung's SDK license
 agreement. If you redistribute this project, verify your right to redistribute the SDK.
+
+---
+
+## ShaguController (OctoWoW build only)
+
+The OctoWoW APK bundles the ShaguController World of Warcraft 1.12 addon
+(https://github.com/shagu/ShaguController, commit 5d3241a) under
+`app/src/octo/assets/addons/ShaguController/` and copies it into the game's
+`Interface/AddOns/` folder on first launch.
+
+MIT License, Copyright (c) 2022 Eric Mauser (Shagu). The full license text is
+in `app/src/octo/assets/addons/ShaguController/LICENSE`.

@@ -1,10 +1,12 @@
 package app.gamenative.ui.screen.wow
 
+import app.gamenative.BuildConfig
 import app.gamenative.ui.screen.wow.WowClientDownloader.TARGET_PRODUCT
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -44,6 +46,8 @@ class WowClientDownloaderTest {
 
     @Test
     fun readBuildInfo_selectsTargetProductFromMultiGameInstall() {
+        // MPQ clients (OctoWoW) have no .build.info product to select.
+        assumeFalse(BuildConfig.MPQ_CLIENT)
         val root = tempFolder.newFolder("multi_wow")
         val buildInfo = File(root, ".build.info")
         buildInfo.writeText(MULTI_GAME_HEADER + MULTI_GAME_ROWS.values.joinToString(""))
@@ -56,6 +60,8 @@ class WowClientDownloaderTest {
 
     @Test
     fun readBuildInfo_detectsIncompatibleGameWhenTargetMissingFromMultiGame() {
+        // MPQ clients (OctoWoW) have no .build.info product to select.
+        assumeFalse(BuildConfig.MPQ_CLIENT)
         val root = tempFolder.newFolder("multi_incompatible")
         val buildInfo = File(root, ".build.info")
         buildInfo.writeText(MULTI_GAME_HEADER + MULTI_GAME_ROWS.filterKeys { it != TARGET_PRODUCT }.values.joinToString(""))

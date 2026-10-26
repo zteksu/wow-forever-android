@@ -108,6 +108,7 @@ android {
             buildConfigField("String", "DEFAULT_GAME_FOLDER", "\"WoW Forever\"")
             buildConfigField("String", "PORTAL", "\"test\"")
             buildConfigField("String", "RELEASE_APK_PREFIX", "\"WoW-Forever\"")
+            buildConfigField("boolean", "MPQ_CLIENT", "false")
         }
         create("retail") {
             dimension = "game"
@@ -122,6 +123,24 @@ android {
             // Empty: live realms use the account region from .build.info instead of a fixed portal.
             buildConfigField("String", "PORTAL", "\"\"")
             buildConfigField("String", "RELEASE_APK_PREFIX", "\"WoW-Retail\"")
+            buildConfigField("boolean", "MPQ_CLIENT", "false")
+        }
+        // OctoWoW: a vanilla 1.12 private server (Turtle WoW based). Its client is a plain folder of
+        // MPQ archives with a 32-bit x86 WoW.exe, so it runs under wowbox64 instead of natively and has
+        // no Blizzard CDN, .build.info or Battle.net login.
+        create("octo") {
+            dimension = "game"
+            applicationId = "app.octowow"
+            resValue("string", "app_name", "OctoWoW")
+            buildConfigField("String", "GAME_NAME", "\"OctoWoW\"")
+            buildConfigField("String", "GAME_EDITION", "\"the OctoWoW client\"")
+            buildConfigField("String", "TARGET_PRODUCT", "\"\"")
+            buildConfigField("String", "FLAVOR_DIR", "\"\"")
+            buildConfigField("String", "EXE_NAME", "\"WoW.exe\"")
+            buildConfigField("String", "DEFAULT_GAME_FOLDER", "\"OctoWoW\"")
+            buildConfigField("String", "PORTAL", "\"\"")
+            buildConfigField("String", "RELEASE_APK_PREFIX", "\"OctoWoW\"")
+            buildConfigField("boolean", "MPQ_CLIENT", "true")
         }
         create("modern") {
             dimension = "androidApi"
