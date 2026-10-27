@@ -101,6 +101,36 @@ class AppUpdaterTest {
     }
 
     @Test
+    fun tagVersion_stripsAppPrefix() {
+        assertEquals("2.3.2", AppUpdater.tagVersion("octowow-v2.3.2"))
+        assertEquals("2.4.0", AppUpdater.tagVersion("forever-v2.4.0"))
+        assertEquals("2.3.1", AppUpdater.tagVersion("v2.3.1"))
+        assertEquals("2.1.2-beta1", AppUpdater.tagVersion("v2.1.2-beta1"))
+    }
+
+    @Test
+    fun parseReleases_picksNewestReleaseWithOwnApk() {
+        fun release(tag: String, asset: String, draft: Boolean = false) = """
+            {"tag_name": "$tag", "name": "$tag", "draft": $draft, "prerelease": false,
+             "assets": [{"name": "$asset", "browser_download_url": "https://example.com/$tag/$asset", "size": 1}]}
+        """
+        val json = "[" + listOf(
+            release("forever-v2.5.0", "WoW-Forever.apk"),
+            release("octowow-v2.4.0", "OctoWoW.apk", draft = true),
+            release("octowow-v2.3.2", "OctoWoW.apk"),
+            release("octowow-v2.3.3", "OctoWoW.apk"),
+            release("v2.3.1", "OctoWoW.apk"),
+        ).joinToString(",") + "]"
+
+        val octo = AppUpdater.parseReleases(json, "2.3.1", "OctoWoW")
+        assertEquals("2.3.3", octo?.version)
+        assertEquals("https://example.com/octowow-v2.3.3/OctoWoW.apk", octo?.downloadUrl)
+        assertEquals("2.5.0", AppUpdater.parseReleases(json, "2.3.1", "WoW-Forever")?.version)
+        assertNull(AppUpdater.parseReleases(json, "2.3.1", "WoW-Retail"))
+        assertNull(AppUpdater.parseReleases(json, "2.3.3", "OctoWoW"))
+    }
+
+    @Test
     fun parseRelease_sameOrOlderVersion_returnsNull() {
         val json = """
             {

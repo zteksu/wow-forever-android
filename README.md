@@ -149,7 +149,15 @@ Release builds are signed with `app/keystores/keystore.properties` when it exist
 - Runs the 32-bit x86 client through the bundled wowbox64 emulator. It launches `VanillaFixes.exe` when present, so the client mods in `dlls.txt` load, and `WoW.exe` otherwise. Rendering uses the DXVK `d3d9.dll` and `dxvk.conf` shipped in the client folder.
 - Installs the [ShaguController](https://github.com/shagu/ShaguController) addon into `Interface/AddOns/` and maps the controller to the keys it expects: left stick moves, right stick moves the mouse, L2/R2 are right/left click, A jumps, Y/X/B and the D-pad are action buttons, L1/R1 cycle targets, Select opens the map, Start is Escape, L3 opens bags and R3 the quest log.
 
-`.github/workflows/release-apk.yml` publishes OctoWoW releases: when a push to `main` or the release branch changes `versionName`, it builds the OctoWoW APK and creates the `v<versionName>` release with it attached as `OctoWoW.apk`, the name the in-app updater looks for. Pushing a matching `v*` tag does the same. Add the `ANDROID_KEYSTORE_*` repository secrets described in the workflow so every release is signed with the same key; otherwise each run signs with a new debug key and installed apps can't update to it.
+Each app has its own branch and release series:
+
+| Branch | App | Release tag | Release asset |
+| :--- | :--- | :--- | :--- |
+| `forever` | WoW Forever | `forever-v<version>` | `WoW-Forever.apk` |
+| `retail` | WoW Retail | `retail-v<version>` | `WoW-Retail.apk` |
+| `octowow` | OctoWoW | `octowow-v<version>` | `OctoWoW.apk` |
+
+`.github/workflows/release-apk.yml` publishes them: a push to one of those branches that changes `versionName` builds that app and creates its release. Each app's updater picks the newest release carrying its own APK, so the three release independently. Add the `ANDROID_KEYSTORE_*` repository secrets described in the workflow so every release is signed with the same key; otherwise each run signs with a new debug key and installed apps can't update to it.
 
 `fetch_components.sh` downloads the three runtime archives from this repo's `components-v1` release and checks them against `tools/components.sha256`. If you already have them, pass a folder instead: `tools/fetch_components.sh /path/to/components`.
 

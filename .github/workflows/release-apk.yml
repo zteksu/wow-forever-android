@@ -1,9 +1,14 @@
-# Builds the OctoWoW APK and attaches it to a GitHub release.
+# Builds one app's APK and attaches it to a GitHub release. Each app lives on its own branch:
 #
-# Publishing: a push to main or the release branch that changes app/build.gradle.kts (or this file)
-# creates the v<versionName> tag and release if they don't exist yet, so bumping versionName is all a
-# release needs. Pushing a v* tag yourself works too; it must match versionName, since the in-app
-# updater compares the tag with the installed version. Manual runs only produce the APK artifact.
+#   branch    builds        release tag        release asset
+#   forever   WoW Forever   forever-v<ver>     WoW-Forever.apk
+#   retail    WoW Retail    retail-v<ver>      WoW-Retail.apk
+#   octowow   OctoWoW       octowow-v<ver>     OctoWoW.apk
+#
+# Publishing: a push to one of those branches that changes versionName in app/build.gradle.kts
+# creates that app's release for the new version. Pushing a matching tag (e.g. octowow-v2.3.2)
+# publishes too. Other pushes, and manual runs, only build the APK as a workflow artifact. Each
+# app's updater picks the newest release carrying its own APK, so the three don't interfere.
 #
 # Signing: set these repository secrets to sign with your own key, so installed apps accept updates:
 #   ANDROID_KEYSTORE_BASE64  (base64 of the .jks file)
@@ -14,9 +19,9 @@ name: Release APK
 
 on:
   push:
-    branches: [main, claude/great-pasteur-2ruwc7]
+    branches: [forever, retail, octowow]
     paths: [app/build.gradle.kts, .github/workflows/release-apk.yml]
-    tags: ["v*"]
+    tags: ["forever-v*", "retail-v*", "octowow-v*"]
   workflow_dispatch:
 
 permissions:
@@ -29,13 +34,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Decide the release tag
+      - name: Decide app and release
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
         run: |
-          version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
-          tag="v$version"
+          # The branch name, or the tag's prefix, says which app this is.
+          case "${GITHUB_REF_NAME%%-v*}" in
+            forever) app=forever; flavor=forever; asset=WoW-Forever.apk ;;
+            retail) app=retail; flavor=retail; asset=WoW-Retail.apk ;;
+            octowow) app=octowow; flavor=octo; asset=OctoWoW.apk ;;
+            *) echo "::error::$GITHUB_REF_NAME isn't an app branch (forever, retail, octowow)"; exit 1 ;;
+          esac
+          version_of() { sed -n 's/^ *versionName = "\(.*\)"/\1/p'; }
+          version=$(version_of < app/build.gradle.kts)
+          tag="$app-v$version"
           publish=false
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             if [ "$GITHUB_REF_NAME" != "$tag" ]; then
@@ -43,12 +57,20 @@ jobs:
               exit 1
             fi
             publish=true
-          elif [ "$GITHUB_EVENT_NAME" = push ] && ! gh release view "$tag" > /dev/null 2>&1; then
-            publish=true
+          elif [ "$GITHUB_EVENT_NAME" = push ] && [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            git fetch -q --depth=1 origin "$BEFORE"
+            previous=$(git show "$BEFORE:app/build.gradle.kts" | version_of)
+            if [ "$previous" != "$version" ] && ! gh release view "$tag" > /dev/null 2>&1; then
+              publish=true
+            fi
           fi
-          echo "Release $tag: publish=$publish"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "App $app, release $tag: publish=$publish"
+          {
+            echo "tag=$tag"
+            echo "flavor=$flavor"
+            echo "asset=$asset"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v4
         with:
@@ -81,20 +103,25 @@ jobs:
           } > app/keystores/keystore.properties
 
       - name: Build
+        env:
+          FLAVOR: ${{ steps.release.outputs.flavor }}
         run: |
           # The secrets Gradle plugin fails without local.properties, which is gitignored.
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          ./gradlew :app:assembleOctoModernRelease
+          ./gradlew ":app:assemble${FLAVOR^}ModernRelease"
 
       - name: Collect APK
+        env:
+          FLAVOR: ${{ steps.release.outputs.flavor }}
+          ASSET: ${{ steps.release.outputs.asset }}
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/octoModern/release/app-octo-modern-release.apk dist/OctoWoW.apk
-          sha256sum dist/OctoWoW.apk | tee dist/OctoWoW.apk.sha256
+          cp "app/build/outputs/apk/${FLAVOR}Modern/release/app-$FLAVOR-modern-release.apk" "dist/$ASSET"
+          sha256sum "dist/$ASSET" | tee "dist/$ASSET.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OctoWoW
+          name: ${{ steps.release.outputs.tag }}
           path: dist/
 
       - name: Publish release
@@ -102,11 +129,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
+          ASSET: ${{ steps.release.outputs.asset }}
         run: |
           if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" dist/OctoWoW.apk --clobber
+            gh release upload "$TAG" "dist/$ASSET" --clobber
           else
             # Creates the tag on this commit when it doesn't exist yet.
-            gh release create "$TAG" dist/OctoWoW.apk --target "$GITHUB_SHA" --title "OctoWoW $TAG" --latest \
-              --notes "OctoWoW $TAG for Android. Install OctoWoW.apk, or update from inside the app."
+            gh release create "$TAG" "dist/$ASSET" --target "$GITHUB_SHA" --title "${ASSET%.apk} ${TAG##*-}" \
+              --notes "${ASSET%.apk} ${TAG##*-} for Android. Install $ASSET, or update from inside the app."
           fi

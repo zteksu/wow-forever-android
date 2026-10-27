@@ -10,11 +10,14 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
 
 object AppUpdater {
-    private const val RELEASES_URL = "https://api.github.com/repos/zteksu/wow-forever-android/releases/latest"
+    // Each app (Forever, Retail, OctoWoW) releases on its own branch and tag series (forever-v2.4.0,
+    // octowow-v2.3.2, ...), so "latest" may belong to another app: read recent releases and pick our own.
+    private const val RELEASES_URL = "https://api.github.com/repos/zteksu/wow-forever-android/releases?per_page=30"
 
     data class Release(
         val version: String,
@@ -23,6 +26,9 @@ object AppUpdater {
         val downloadUrl: String,
         val sizeBytes: Long,
     )
+
+    /** The version in a release tag: "octowow-v2.3.2" and "v2.3.2" both give "2.3.2". */
+    fun tagVersion(tag: String): String = tag.replace(Regex("^[A-Za-z]+-"), "").trimStart('v', 'V')
 
     fun isNewer(latest: String, current: String = BuildConfig.VERSION_NAME): Boolean {
         val parse = { v: String ->
@@ -49,8 +55,10 @@ object AppUpdater {
         apkPrefix: String = BuildConfig.RELEASE_APK_PREFIX,
     ): Release? = runCatching {
         val json = JSONObject(jsonString)
+        if (json.optBoolean("draft") || json.optBoolean("prerelease")) return null
         val tag = json.optString("tag_name")
-        if (!isNewer(tag, currentVersion)) return null
+        val version = tagVersion(tag)
+        if (!isNewer(version, currentVersion)) return null
 
         val assets = json.optJSONArray("assets") ?: return null
         for (i in 0 until assets.length()) {
@@ -59,7 +67,7 @@ object AppUpdater {
             val url = asset.optString("browser_download_url")
             if (name.startsWith(apkPrefix, ignoreCase = true) && name.endsWith(".apk", ignoreCase = true) && url.isNotBlank()) {
                 return Release(
-                    version = tag.trimStart('v', 'V'),
+                    version = version,
                     name = json.optString("name", tag),
                     notes = json.optString("body"),
                     downloadUrl = url,
@@ -68,6 +76,18 @@ object AppUpdater {
             }
         }
         null
+    }.getOrNull()
+
+    /** The highest-versioned release in a GitHub release list that is newer and carries this app's APK. */
+    fun parseReleases(
+        jsonString: String,
+        currentVersion: String = BuildConfig.VERSION_NAME,
+        apkPrefix: String = BuildConfig.RELEASE_APK_PREFIX,
+    ): Release? = runCatching {
+        val releases = JSONArray(jsonString)
+        (0 until releases.length())
+            .mapNotNull { i -> releases.optJSONObject(i)?.let { parseRelease(it.toString(), currentVersion, apkPrefix) } }
+            .reduceOrNull { best, next -> if (isNewer(next.version, best.version)) next else best }
     }.getOrNull()
 
     suspend fun check(currentVersion: String = BuildConfig.VERSION_NAME): Release? = withContext(Dispatchers.IO) {
@@ -80,7 +100,7 @@ object AppUpdater {
             Net.http.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
                 val body = response.body?.string() ?: return@withContext null
-                parseRelease(body, currentVersion)
+                parseReleases(body, currentVersion)
             }
         }.getOrElse {
             Timber.w(it, "AppUpdater check failed")
