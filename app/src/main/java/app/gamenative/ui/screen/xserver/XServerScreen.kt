@@ -3892,8 +3892,9 @@ private fun getWineStartCommand(
                 guestProgramLauncherComponent.workingDir = hostDir
             }
         }
-        val isArm64 = executablePath.contains("ARM64", ignoreCase = true)
-        if (isArm64 && !executablePath.contains(" ")) executablePath else "\"$executablePath\""
+        // Quote only when needed: started without winhandler.exe, the quotes reach explorer.exe escaped
+        // (\"G:\WoW.exe\") and it can't find the program.
+        if (!executablePath.contains(" ")) executablePath else "\"$executablePath\""
     } else {
         if (gameFolderPath == null) {
             Timber.tag("XServerScreen").e("Could not find A: drive: $appId")
