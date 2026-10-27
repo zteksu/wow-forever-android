@@ -3624,7 +3624,9 @@ private fun setupXEnvironment(
     }
 
     ProcessHelper.addDebugCallback { line ->
-        if (captureLogs) {
+        // The launch log skips the per-file path-redirect and controller-shim chatter, which otherwise
+        // buries Wine's errors under thousands of lines.
+        if (captureLogs && !(launchLog && LAUNCH_LOG_NOISE.any { line.startsWith(it) })) {
             logFile?.appendText(line + "\n")
         }
     }
@@ -3885,11 +3887,7 @@ private fun getWineStartCommand(
             }
         }
         val isArm64 = executablePath.contains("ARM64", ignoreCase = true)
-        if (isArm64) {
-            if (executablePath.contains(" ")) "\"$executablePath\"" else executablePath
-        } else {
-            "winhandler.exe \"$executablePath\""
-        }
+        if (isArm64 && !executablePath.contains(" ")) executablePath else "\"$executablePath\""
     } else {
         if (gameFolderPath == null) {
             Timber.tag("XServerScreen").e("Could not find A: drive: $appId")
@@ -3904,8 +3902,11 @@ private fun getWineStartCommand(
         "\"A:\\${normalizedPath}\""
     }
 
+    // Only x86/x64 programs go through winhandler.exe; ARM64 ones (the WoW clients) start directly.
     return if (args.contains("ARM64", ignoreCase = true)) args else "winhandler.exe $args"
 }
+private val LAUNCH_LOG_NOISE = listOf("I replace:", "evshim:")
+
 private fun exit(
     winHandler: WinHandler?,
     frameRating: FrameRating?,

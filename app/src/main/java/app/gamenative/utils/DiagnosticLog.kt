@@ -29,6 +29,10 @@ import timber.log.Timber
 object DiagnosticLog {
     private const val MAX_LOG_BYTES = 512 * 1024L
     private const val REPORT_LOG_LINES = 1500
+    private const val REPORT_LAUNCH_LINES = 600
+
+    // Older launch logs still contain these per-file redirect and controller-shim lines.
+    private val LAUNCH_LOG_NOISE = listOf("I replace:", "evshim:")
     private const val REPORT_LOGCAT_LINES = 500
     private const val MAX_EXIT_REASONS = 8
     private const val MAX_CLIPBOARD_CHARS = 100_000
@@ -85,6 +89,25 @@ object DiagnosticLog {
         appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
         appendLine()
 
+        if (BuildConfig.MPQ_CLIENT) {
+            // XServerScreen writes the Wine launch log to Download/ for the MPQ client. It comes first so a
+            // copied or previewed report, which keeps the start, always includes how the game exited.
+            val launchLog = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                "${BuildConfig.GAME_NAME}-launch.log",
+            )
+            appendLine("---------- Game launch log (last $REPORT_LAUNCH_LINES lines) ----------")
+            appendLine(
+                runCatching {
+                    launchLog.readLines()
+                        .filterNot { line -> LAUNCH_LOG_NOISE.any { line.startsWith(it) } }
+                        .takeLast(REPORT_LAUNCH_LINES)
+                        .joinToString("\n")
+                }.getOrElse { "(unavailable: ${it.message})" },
+            )
+            appendLine()
+        }
+
         appendLine("---------- Previous exits (newest first) ----------")
         appendLine(exitReasons(context))
         appendLine()
@@ -103,20 +126,6 @@ object DiagnosticLog {
             .flatMap { it.readLines() }
         appendLine(lines.takeLast(REPORT_LOG_LINES).joinToString("\n").ifEmpty { "(empty)" })
         appendLine()
-
-        if (BuildConfig.MPQ_CLIENT) {
-            // XServerScreen writes the Wine launch log to Download/ for the MPQ client.
-            val launchLog = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                "${BuildConfig.GAME_NAME}-launch.log",
-            )
-            appendLine("---------- Game launch log (last $REPORT_LOG_LINES lines) ----------")
-            appendLine(
-                runCatching { launchLog.readLines().takeLast(REPORT_LOG_LINES).joinToString("\n") }
-                    .getOrElse { "(unavailable: ${it.message})" },
-            )
-            appendLine()
-        }
 
         appendLine("---------- Logcat (this session) ----------")
         appendLine(CrashHandler.getAppLogs(REPORT_LOGCAT_LINES))
