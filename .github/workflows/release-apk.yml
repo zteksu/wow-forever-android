@@ -1,8 +1,9 @@
 # Builds the OctoWoW APK and attaches it to a GitHub release.
 #
-# Push a tag like v2.3.1 to publish that release (it must match versionName in app/build.gradle.kts,
-# since the in-app updater compares the tag with the installed version). Run it by hand from the
-# Actions tab to just get the APK as a workflow artifact.
+# Publishing: a push to main or the release branch that changes app/build.gradle.kts (or this file)
+# creates the v<versionName> tag and release if they don't exist yet, so bumping versionName is all a
+# release needs. Pushing a v* tag yourself works too; it must match versionName, since the in-app
+# updater compares the tag with the installed version. Manual runs only produce the APK artifact.
 #
 # Signing: set these repository secrets to sign with your own key, so installed apps accept updates:
 #   ANDROID_KEYSTORE_BASE64  (base64 of the .jks file)
@@ -13,6 +14,8 @@ name: Release APK
 
 on:
   push:
+    branches: [main, claude/great-pasteur-2ruwc7]
+    paths: [app/build.gradle.kts, .github/workflows/release-apk.yml]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -25,6 +28,27 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
+      - name: Decide the release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+          tag="v$version"
+          publish=false
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "$GITHUB_REF_NAME" != "$tag" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME doesn't match versionName $version"
+              exit 1
+            fi
+            publish=true
+          elif [ "$GITHUB_EVENT_NAME" = push ] && ! gh release view "$tag" > /dev/null 2>&1; then
+            publish=true
+          fi
+          echo "Release $tag: publish=$publish"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v4
         with:
@@ -71,14 +95,15 @@ jobs:
           path: dist/
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.release.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.release.outputs.tag }}
         run: |
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" dist/OctoWoW.apk --clobber
           else
-            gh release create "$TAG" dist/OctoWoW.apk --title "OctoWoW $TAG" --latest \
+            # Creates the tag on this commit when it doesn't exist yet.
+            gh release create "$TAG" dist/OctoWoW.apk --target "$GITHUB_SHA" --title "OctoWoW $TAG" --latest \
               --notes "OctoWoW $TAG for Android. Install OctoWoW.apk, or update from inside the app."
           fi
