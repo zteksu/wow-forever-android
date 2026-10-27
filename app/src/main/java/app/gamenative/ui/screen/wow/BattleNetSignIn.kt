@@ -71,14 +71,17 @@ object BattleNetSignIn {
     fun removeLoginFile(gameRoot: File) {
         // MPQ clients never get a login.txt, and their client folder is the game root, so leave its files alone.
         if (BuildConfig.MPQ_CLIENT) return
-        try {
-            val file = File(File(gameRoot, WowClientDownloader.FLAVOR_DIR), "login.txt")
-            if (file.exists()) {
-                file.writeBytes(ByteArray(file.length().coerceAtMost(4096).toInt()))
-                file.delete()
+        // Also clear the old product's folder, where a beta-era login.txt may have been left behind.
+        listOf(WowClientDownloader.FLAVOR_DIR, BuildConfig.LEGACY_FLAVOR_DIR).filter { it.isNotBlank() }.forEach { dir ->
+            try {
+                val file = File(File(gameRoot, dir), "login.txt")
+                if (file.exists()) {
+                    file.writeBytes(ByteArray(file.length().coerceAtMost(4096).toInt()))
+                    file.delete()
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to remove login.txt")
             }
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to remove login.txt")
         }
     }
 

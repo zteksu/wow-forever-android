@@ -101,13 +101,19 @@ android {
             applicationId = "app.wowforever"
             resValue("string", "app_name", "WoW Forever")
             buildConfigField("String", "GAME_NAME", "\"WoW Forever\"")
-            buildConfigField("String", "GAME_EDITION", "\"World of Warcraft Classic Beta\"")
-            buildConfigField("String", "TARGET_PRODUCT", "\"wow_classic_beta\"")
-            buildConfigField("String", "FLAVOR_DIR", "\"_classic_beta_\"")
-            buildConfigField("String", "EXE_NAME", "\"WowB-ARM64.exe\"")
+            buildConfigField("String", "GAME_EDITION", "\"World of Warcraft: Forever\"")
+            // The released game (4 Nov 2026) is its own product, wowf, installed in _forever_. Installs
+            // still on the beta product are moved over by WowClientDownloader.migrateLegacyProduct.
+            buildConfigField("String", "TARGET_PRODUCT", "\"wowf\"")
+            buildConfigField("String", "LEGACY_PRODUCT", "\"wow_classic_beta\"")
+            buildConfigField("String", "LEGACY_FLAVOR_DIR", "\"_classic_beta_\"")
+            buildConfigField("String", "FLAVOR_DIR", "\"_forever_\"")
+            buildConfigField("String", "EXE_NAME", "\"Wow-ARM64.exe\"")
             buildConfigField("String", "DEFAULT_GAME_FOLDER", "\"WoW Forever\"")
-            buildConfigField("String", "PORTAL", "\"test\"")
+            // Empty: live realms use the account region from .build.info. The beta used the "test" portal.
+            buildConfigField("String", "PORTAL", "\"\"")
             buildConfigField("String", "RELEASE_APK_PREFIX", "\"WoW-Forever\"")
+            buildConfigField("String", "LAUNCHER_SUBTITLE", "\"FOREVER (ARM64 NATIVE)\"")
             buildConfigField("boolean", "MPQ_CLIENT", "false")
         }
         create("retail") {
@@ -123,6 +129,9 @@ android {
             // Empty: live realms use the account region from .build.info instead of a fixed portal.
             buildConfigField("String", "PORTAL", "\"\"")
             buildConfigField("String", "RELEASE_APK_PREFIX", "\"WoW-Retail\"")
+            buildConfigField("String", "LAUNCHER_SUBTITLE", "\"RETAIL (ARM64 NATIVE)\"")
+            buildConfigField("String", "LEGACY_PRODUCT", "\"\"")
+            buildConfigField("String", "LEGACY_FLAVOR_DIR", "\"\"")
             buildConfigField("boolean", "MPQ_CLIENT", "false")
         }
         // OctoWoW: a vanilla 1.12 private server (Turtle WoW based). Its client is a plain folder of
@@ -140,6 +149,9 @@ android {
             buildConfigField("String", "DEFAULT_GAME_FOLDER", "\"OctoWoW\"")
             buildConfigField("String", "PORTAL", "\"\"")
             buildConfigField("String", "RELEASE_APK_PREFIX", "\"OctoWoW\"")
+            buildConfigField("String", "LAUNCHER_SUBTITLE", "\"OCTOWOW (X86 EMULATED)\"")
+            buildConfigField("String", "LEGACY_PRODUCT", "\"\"")
+            buildConfigField("String", "LEGACY_FLAVOR_DIR", "\"\"")
             buildConfigField("boolean", "MPQ_CLIENT", "true")
         }
         create("modern") {

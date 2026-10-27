@@ -3,9 +3,11 @@ package app.gamenative.ui.screen.wow
 import app.gamenative.BuildConfig
 import app.gamenative.ui.screen.wow.WowClientDownloader.TARGET_PRODUCT
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
@@ -76,11 +78,41 @@ class WowClientDownloaderTest {
     @Test
     fun readBuildInfo_parsesHostInstallationIfExists() {
         val hostFile = File("/Applications/World of Warcraft/.build.info")
-        if (!hostFile.isFile || TARGET_PRODUCT != "wow_classic_beta") return
+        if (!hostFile.isFile || "|$TARGET_PRODUCT" !in hostFile.readText()) return
         val result = WowClientDownloader.readBuildInfo(hostFile)
         assertNotNull(result)
-        assertEquals("wow_classic_beta", result?.get("Product"))
-        assertEquals("1.60.1.70205", result?.get("Version"))
+        assertEquals(TARGET_PRODUCT, result?.get("Product"))
+    }
+
+    @Test
+    fun migrateLegacyProduct_addsTargetRowClonedFromLegacy() {
+        assumeFalse(BuildConfig.MPQ_CLIENT)
+        val legacy = MULTI_GAME_ROWS.keys.first { it != TARGET_PRODUCT }
+        val root = tempFolder.newFolder("legacy")
+        val buildInfo = File(root, ".build.info")
+        buildInfo.writeText(MULTI_GAME_HEADER + MULTI_GAME_ROWS.getValue(legacy))
+
+        assertTrue(WowClientDownloader.migrateLegacyProduct(root, legacy))
+
+        val result = WowClientDownloader.readBuildInfo(buildInfo)
+        assertEquals(TARGET_PRODUCT, result?.get("Product"))
+        // Same build as the legacy row, so the version check offers the update to the new client.
+        assertEquals(MULTI_GAME_VERSIONS.getValue(legacy), result?.get("Version"))
+        assertEquals(3, buildInfo.readLines().size)
+        assertTrue(File(root, ".build.info.bak").isFile)
+        assertFalse(WowClientDownloader.migrateLegacyProduct(root, legacy))
+    }
+
+    @Test
+    fun migrateLegacyProduct_leavesOtherInstallsAlone() {
+        val root = tempFolder.newFolder("other")
+        val buildInfo = File(root, ".build.info")
+        val original = MULTI_GAME_HEADER + MULTI_GAME_ROWS.getValue("wow_classic_era")
+        buildInfo.writeText(original)
+
+        assertFalse(WowClientDownloader.migrateLegacyProduct(root, "wow_classic_beta"))
+        assertFalse(WowClientDownloader.migrateLegacyProduct(root, ""))
+        assertEquals(original, buildInfo.readText())
     }
 
     @Test
@@ -96,7 +128,8 @@ class WowClientDownloaderTest {
             "wow" to "us|1|11111111111111111111111111111111|22222222222222222222222222222222|33333333333333333333333333333333|10000|tpr/wow|level3.blizzard.com|?|0|11.0.7.58238|wow\n",
             "wow_classic_era" to "us|1|44444444444444444444444444444444|55555555555555555555555555555555|66666666666666666666666666666666|10000|tpr/wow|level3.blizzard.com|?|0|1.15.5.58238|wow_classic_era\n",
             "wow_classic_beta" to "us|1|77777777777777777777777777777777|88888888888888888888888888888888|99999999999999999999999999999999|10000|tpr/wow|level3.blizzard.com|?|1|1.60.1.61118|wow_classic_beta\n",
+            "wowf" to "us|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|cccccccccccccccccccccccccccccccc|10000|tpr/wow|level3.blizzard.com|?|1|1.60.1.70630|wowf\n",
         )
-        val MULTI_GAME_VERSIONS = mapOf("wow" to "11.0.7.58238", "wow_classic_era" to "1.15.5.58238", "wow_classic_beta" to "1.60.1.61118")
+        val MULTI_GAME_VERSIONS = mapOf("wow" to "11.0.7.58238", "wow_classic_era" to "1.15.5.58238", "wow_classic_beta" to "1.60.1.61118", "wowf" to "1.60.1.70630")
     }
 }

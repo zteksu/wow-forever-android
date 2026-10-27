@@ -46,6 +46,31 @@ object WowClientDownloader {
     fun readBuildInfo(buildInfo: File): Map<String, String>? =
         runCatching { activeBuild(buildInfo) }.getOrNull()
 
+    /**
+     * Moves an install made for this flavor's old product (the Forever beta) onto the current one by
+     * adding a TARGET_PRODUCT row cloned from the old row. Both use the same CDN archives, so Data/
+     * carries over; the version check then sees the old build and the update downloads the new client.
+     * The old row and a .build.info.bak copy are kept. Returns true when it changed .build.info.
+     */
+    fun migrateLegacyProduct(gameRoot: File, legacyProduct: String = BuildConfig.LEGACY_PRODUCT): Boolean {
+        if (legacyProduct.isBlank()) return false
+        val buildInfo = File(gameRoot, BUILD_INFO)
+        if (!buildInfo.isFile) return false
+        val lines = buildInfo.readLines().filter { it.isNotBlank() }
+        val header = psvHeader(lines.firstOrNull() ?: return false)
+        val productIdx = header.indexOf("Product")
+        if (productIdx < 0) return false
+        val rows = lines.drop(1).map { it.split("|") }
+        if (rows.any { it.getOrNull(productIdx) == TARGET_PRODUCT }) return false
+        val legacy = rows.firstOrNull { it.getOrNull(productIdx) == legacyProduct } ?: return false
+
+        val migrated = legacy.toMutableList().also { it[productIdx] = TARGET_PRODUCT }
+        buildInfo.copyTo(File(gameRoot, "$BUILD_INFO.bak"), overwrite = true)
+        buildInfo.writeText((lines + migrated.joinToString("|")).joinToString("\n") + "\n")
+        Timber.i("Migrated $BUILD_INFO from $legacyProduct to $TARGET_PRODUCT")
+        return true
+    }
+
     fun checkVersion(gameRoot: File): VersionCheckResult? {
         val row = runCatching { activeBuild(File(gameRoot, BUILD_INFO)) }.getOrElse {
             Timber.w(it, "checkVersion: no readable $BUILD_INFO in $gameRoot")

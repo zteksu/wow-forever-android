@@ -10,7 +10,7 @@ from pathlib import Path
 CDN = "http://level3.blizzard.com/tpr/wow"
 INSTALL_DIR = Path(os.environ.get("WOW_DIR", "/Applications/World of Warcraft"))
 PLATFORM_TAGS = {"Windows", "arm64"}
-PRODUCT = os.environ.get("WOW_PRODUCT", "wow_classic_beta")
+PRODUCT = os.environ.get("WOW_PRODUCT", "wowf")
 
 
 def fetch(kind, key, byte_range=None):
@@ -139,7 +139,7 @@ def ckeys_to_ekeys(data, wanted):
 
 
 def main():
-    out_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "WowB-ARM64")
+    out_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "Wow-ARM64")
     build_key, version = active_build_config()
     print(f"build {version} ({build_key})")
     build = read_config(fetch("config", build_key).decode())

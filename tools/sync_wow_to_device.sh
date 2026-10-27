@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# WOW_GAME=retail syncs standard WoW for the WoW Retail app; the default is the Forever beta.
+# WOW_GAME=retail syncs standard WoW for the WoW Retail app; the default is WoW Forever.
 case "${WOW_GAME:-forever}" in
-    forever) PRODUCT=wow_classic_beta FLAVOR_DIR=_classic_beta_ EXE=WowB-ARM64.exe DEFAULT_DST="WoW Forever" ;;
+    forever) PRODUCT=wowf FLAVOR_DIR=_forever_ EXE=Wow-ARM64.exe DEFAULT_DST="WoW Forever" ;;
     retail) PRODUCT=wow FLAVOR_DIR=_retail_ EXE=Wow-ARM64.exe DEFAULT_DST="World of Warcraft" ;;
     *) echo "WOW_GAME must be forever or retail" >&2; exit 1 ;;
 esac

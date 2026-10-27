@@ -1,10 +1,10 @@
 # WoW Forever for Android
 
-Play the **World of Warcraft: Forever beta** on Snapdragon Android handhelds as a normal Android app. You tap the icon, press Play, and the game runs.
+Play **World of Warcraft: Forever** on Snapdragon Android handhelds as a normal Android app. You tap the icon, press Play, and the game runs.
 
 This uses Blizzard's own **Windows ARM64** WoW client, so the game itself runs natively on the phone's CPU. Wine translates the Windows calls, and DXVK plus a patched Turnip Vulkan driver render the game on the Adreno GPU. Nothing is emulated as x86.
 
-> Unofficial community project. Not affiliated with or endorsed by Blizzard Entertainment. You need your own Battle.net account with WoW Forever beta access. This repo and its releases contain **no** Blizzard game files.
+> Unofficial community project. Not affiliated with or endorsed by Blizzard Entertainment. You need your own Battle.net account with access to WoW Forever (included with a WoW subscription or Game Time). This repo and its releases contain **no** Blizzard game files.
 
 ---
 
@@ -24,7 +24,7 @@ Requirements:
 - Snapdragon 8 series (Adreno 7xx or Adreno 8xx). The app bundles both the Adreno 740 driver and the Turnip v32 driver for Snapdragon 8 Elite / Adreno 8xx, automatically detecting the GPU and applying the optimal driver and environment flags.
 - Android 10 or newer, 64-bit.
 - About **80 GB** free for the game data (internal storage or SD card), plus about 4 GB of internal storage for the app and its Windows environment.
-- A Mac or PC with the WoW Forever beta installed through Battle.net, to copy the game data from.
+- A Mac or PC with WoW Forever installed through Battle.net, to copy the game data from.
 
 ---
 
@@ -46,7 +46,7 @@ WoW Forever/
 
 - `Data/` is the same on every platform, so a Mac, Windows, or ARM install all work.
 - `.build.info` is a hidden file. Copy it too. Without it the game fails with *"CAS system was unable to initialize"*.
-- You don't need `WowB-ARM64.exe`. Mac and x86 installs don't ship it, so the app downloads the matching Windows ARM64 client from Blizzard's CDN when you press Play, and checks its hashes.
+- You don't need `Wow-ARM64.exe`. Mac and x86 installs don't ship it, so the app downloads the matching Windows ARM64 client from Blizzard's CDN when you press Play, and checks its hashes.
 - If you used a different folder, or moved it, the launcher shows **Locate Game Files**. Pick the folder that contains `.build.info` and `Data/`. **Change Location** switches it later.
 
 Transfer the files over to a `WoW Forever/` folder on your device. You can do this by:
@@ -71,7 +71,7 @@ Open **WoW Forever**. Once your game files and Battle.net credentials are config
 - **Controller:** built-in handheld controllers work in-game. WoW's own gamepad mode handles the mapping.
 - **In-game menu:** press Back (the button or the back swipe gesture) to open the sidebar. It has **Keyboard**, on-screen controls, performance overlay and **Exit**.
 - **Keyboard:** the sidebar's **Keyboard** opens the Android keyboard. On dual-screen devices like the Thor it appears on the bottom screen. Symbols like `@` work, and so does pasting.
-- **Battle.net Auto-Login:** configure credentials directly on the launcher setup screen (**Configure Login** / **Update Login**). Credentials are saved encrypted on-device via Android Keystore. On boot, the launcher generates `_classic_beta_/login.txt`, which the WoW client automatically reads on startup to sign in natively without macro simulation or synthetic clicks. Use **Forget Saved Login** on the launcher setup screen to clear credentials and remove the login file.
+- **Battle.net Auto-Login:** configure credentials directly on the launcher setup screen (**Configure Login** / **Update Login**). Credentials are saved encrypted on-device via Android Keystore. On boot, the launcher generates `_forever_/login.txt`, which the WoW client automatically reads on startup to sign in natively without macro simulation or synthetic clicks. Use **Forget Saved Login** on the launcher setup screen to clear credentials and remove the login file.
   - Authenticator codes still have to be entered by hand.
 
 ---
@@ -83,11 +83,21 @@ WoW Forever v2.0 features a native in-app game updater connected directly to Bli
 Whenever Blizzard patches the game:
 1. **Live Version Check:** The launcher automatically checks the live version against Blizzard's public patch service on startup.
 2. **Update Gate:** If an update is detected, auto-launch cancels and displays the update card with the remote build version, plus a secondary *Launch Anyway (Outdated)* override.
-3. **One-Tap Update:** Tapping **UPDATE TO {version}** downloads the new ARM64 client binaries (`WowB-ARM64.exe` and companion DLLs), saves remote configs to `Data/config/`, syncs new CASC index archives to `Data/indices/`, and atomically updates `.build.info` on disk over Wi-Fi.
+3. **One-Tap Update:** Tapping **UPDATE TO {version}** downloads the new ARM64 client binaries (`Wow-ARM64.exe` and companion DLLs), saves remote configs to `Data/config/`, syncs new CASC index archives to `Data/indices/`, and atomically updates `.build.info` on disk over Wi-Fi.
 4. **Instant Boot:** Once the update completes, the launcher automatically transitions into booting World of Warcraft at 60 FPS.
 5. **In-Game Streaming:** The game engine's internal streaming client seamlessly streams any newly introduced assets from Blizzard's edge CDNs during gameplay.
 
 *(Optional fallback: If you ever want to re-seed or mirror your full PC installation over USB, `tools/sync_wow_to_device.sh` is still available.)*
+
+### Moving from the beta to the release
+
+The released game (4 November 2026) is a separate Battle.net product, `wowf`, installed in `_forever_/` with `Wow-ARM64.exe`; the beta was `wow_classic_beta` in `_classic_beta_/` with `WowB-ARM64.exe`. Both use the same game data, so a beta install on the device carries over without re-copying `Data/`:
+
+1. The launcher adds a `wowf` entry to `.build.info` (keeping the beta one, with a `.build.info.bak` backup).
+2. It shows **UPDATE TO 1.60.1.x**. Tapping it, or Play, downloads the release client into `_forever_/`.
+3. `_classic_beta_/WTF/Config.wtf` is copied to `_forever_/WTF/` so your settings carry over, and its beta `portal "test"` is switched to your region.
+
+The `_classic_beta_/` folder can be deleted afterwards.
 
 ---
 
@@ -95,10 +105,10 @@ Whenever Blizzard patches the game:
 
 | Symptom | Fix |
 | :--- | :--- |
-| *CAS system was unable to initialize: no active install info entries* | `.build.info` or `_classic_beta_/.flavor.info` is missing on the device. |
+| *CAS system was unable to initialize: no active install info entries* | `.build.info` or `_forever_/.flavor.info` is missing on the device. |
 | *No realms available* / no servers listed | The device client is out of date. Tap **Update** on the launcher setup screen, or restart the app with Wi-Fi enabled. |
 | Keyboard doesn't appear | Force-stop Gboard (Settings → Apps → Gboard → Force stop) and open **Keyboard** again. It can get stuck on the second screen. |
-| Returns to the launcher after "Launching Game…" | Check the files under `_classic_beta_/Errors/` on the device. |
+| Returns to the launcher after "Launching Game…" | Check the files under `_forever_/Errors/` on the device. |
 | Handheld frontend (e.g. Cocoon) shows the wrong icon | The frontend cached an old icon. Set it with the frontend's "Edit App Artwork", or reinstall the app. |
 
 ---
@@ -121,10 +131,10 @@ The same code also builds **WoW Retail**, an APK for standard (retail) World of 
 | | WoW Forever | WoW Retail |
 | :--- | :--- | :--- |
 | Package | `app.wowforever` | `app.wowretail` (installs alongside Forever) |
-| Battle.net product | `wow_classic_beta` | `wow` |
-| Client folder / exe | `_classic_beta_/WowB-ARM64.exe` | `_retail_/Wow-ARM64.exe` |
+| Battle.net product | `wowf` | `wow` |
+| Client folder / exe | `_forever_/Wow-ARM64.exe` | `_retail_/Wow-ARM64.exe` |
 | Default game folder | `WoW Forever/` | `World of Warcraft/` |
-| `portal` CVar | `test` | Region from `.build.info` (`US`, `EU`, ...) |
+| `portal` CVar | Region from `.build.info` (`US`, `EU`, ...) | Region from `.build.info` |
 | Release asset | `WoW-Forever.apk` | `WoW-Retail.apk` |
 
 Retail has its own launcher icon in `app/src/retail/res` (original artwork, regenerate it with `tools/make_flavor_icon.py retail`). Copy `.build.info` and `Data/` from a retail install, or run `WOW_GAME=retail tools/sync_wow_to_device.sh`. Retail data is well over 100 GB, and retail is much heavier on the GPU than Forever, so expect lower settings and frame rates. Each app's self-updater only picks its own APK from a GitHub release, so both APKs can go on the same release.
@@ -166,7 +176,7 @@ GameNative is a general game library with Steam, GOG, Epic, Amazon, EA and Rocks
 - **Direct launch & instant boot:** the app opens to a WoW splash screen (`ui/screen/wow/WoWForeverScreen.kt`) and automatically boots straight into the game once configured. Holding **Start + Select + L2 + R2** or pressing Back on the loading screen cancels boot to return to the setup screen.
 - **Pre-configured container:** bionic, Proton 11 ARM64EC, Turnip through the Vulkan wrapper, DXVK 2.4.1 aarch64, WINEESYNC off, all 8 cores, 1920x1080, and `G:` mapped to `/storage/emulated/0/WoW Forever`.
 - **Native ARM64 launch:** GameNative wraps every Windows program in `winhandler.exe`, an x86-64 helper that needs x86 emulation. ARM64 executables now launch directly, so the game never goes through FEX, and the working directory is set from the mapped drive.
-- **Game file setup:** the launcher writes `_classic_beta_/.flavor.info` and a basic `WTF/Config.wtf` if they're missing, forces `gxApi "D3D11"` (so a copied Mac config that says Metal can't break it), and refuses to start without `.build.info`.
+- **Game file setup:** the launcher writes `_forever_/.flavor.info` and a basic `WTF/Config.wtf` if they're missing, forces `gxApi "D3D11"` (so a copied Mac config that says Metal can't break it), and refuses to start without `.build.info`.
 - **Package-name fixes:** several paths were hard-coded to `app.gamenative`: the bionic library path rewrite (`WINEMU_HOST_PKG` / `HOST_PKG`), the gamepad shared-memory files, the DXVK state cache and the default drives. The controller path was the reason controllers didn't work.
 - **Small robustness fixes:** non-numeric container IDs no longer crash the ID parser, and the bionic redirect library is copied in if it's missing.
 - **Keyboard fixes:** GameNative's on-screen keyboard dropped shifted symbols (`@` came through as `2`), because it sent key codes without the character or the Shift key. The fix is in `Keyboard.java` and `IMEInputReceiver.kt`. The keyboard now always goes through the IME receiver, so it appears on the Thor's bottom screen.

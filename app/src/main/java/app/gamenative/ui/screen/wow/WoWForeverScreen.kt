@@ -370,7 +370,7 @@ fun WoWForeverScreen(
                     color = Color(0xFFF0E6D2)
                 )
                 Text(
-                    text = "FOREVER BETA (ARM64 NATIVE)",
+                    text = BuildConfig.LAUNCHER_SUBTITLE,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp,
@@ -808,6 +808,8 @@ object GamePath {
 
     fun status(context: Context, path: String): Status {
         val root = File(path)
+        // Every readiness check runs this first, so a beta install is on the release product before it's judged.
+        runCatching { WowClientDownloader.migrateLegacyProduct(root) }.onFailure { Timber.w(it, "Install migration failed") }
         return Status(
             exeExists = File(root, "$FLAVOR_DIR/$EXE_NAME").exists(),
             dataExists = File(root, "Data").listFiles()?.isNotEmpty() == true,
@@ -1063,6 +1065,7 @@ private fun ensureGameConfig(root: File, screenSize: String) {
     // select Metal. Resolutions are reset when missing or no longer fitting the screen (e.g. after a fold
     // or unfold): WoW's "auto" otherwise picks a 720p size because it sees a low-end Intel GPU via Wine.
     val configWtf = File(flavorDir, "WTF/Config.wtf")
+    migrateLegacyConfig(root, configWtf)
     if (!configWtf.exists()) {
         configWtf.parentFile?.mkdirs()
         val portal = portalOf(root)?.let { mapOf("portal" to "\"$it\"") }.orEmpty()
@@ -1072,7 +1075,8 @@ private fun ensureGameConfig(root: File, screenSize: String) {
     }
 
     val gxApi = "SET gxApi ${CONFIG_DEFAULTS.getValue("gxApi")}"
-    val original = configWtf.readLines()
+    val raw = configWtf.readLines()
+    val original = dropBetaPortal(root, raw)
     val staleResolutionKeys = RESOLUTION_KEYS.filter { key ->
         val line = original.firstOrNull { it.startsWith("SET $key ", ignoreCase = true) }
         line == null || !fitsScreen(line.substringAfter(" ").substringAfter(" ").trim('"'), screenSize)
@@ -1080,12 +1084,33 @@ private fun ensureGameConfig(root: File, screenSize: String) {
     val updated = original.filterNot { line ->
         line.startsWith("SET gxApi ", ignoreCase = true) || staleResolutionKeys.any { line.startsWith("SET $it ", ignoreCase = true) }
     } + gxApi + staleResolutionKeys.map { "SET $it \"$screenSize\"" }
-    if (original.none { it == gxApi } || staleResolutionKeys.isNotEmpty()) {
+    if (original.none { it == gxApi } || staleResolutionKeys.isNotEmpty() || original != raw) {
         configWtf.writeText(updated.joinToString("\n") + "\n")
     }
 }
 
-// Forever's beta realms live on the "test" portal. Retail has none fixed, so use the install's region (US, EU, ...).
+/** Starts the release client from the beta's settings (graphics, keybind mode, ...) rather than defaults. */
+private fun migrateLegacyConfig(root: File, configWtf: File) {
+    if (BuildConfig.LEGACY_FLAVOR_DIR.isBlank() || configWtf.exists()) return
+    val legacy = File(root, "${BuildConfig.LEGACY_FLAVOR_DIR}/WTF/Config.wtf")
+    if (!legacy.isFile) return
+    configWtf.parentFile?.mkdirs()
+    // The beta's product id would make the release client report itself as the beta.
+    val lines = legacy.readLines().filterNot { it.startsWith("SET agentUID ", ignoreCase = true) } +
+        "SET agentUID \"$TARGET_PRODUCT\""
+    configWtf.writeText(lines.joinToString("\n") + "\n")
+}
+
+/** The beta's "test" portal would send the release client to the beta realms, so swap it for the live one. */
+private fun dropBetaPortal(root: File, lines: List<String>): List<String> {
+    val portal = portalOf(root) ?: return lines
+    if (BuildConfig.LEGACY_PRODUCT.isBlank() || portal.equals("test", ignoreCase = true)) return lines
+    val beta = lines.indexOfFirst { it.equals("SET portal \"test\"", ignoreCase = true) }
+    if (beta < 0) return lines
+    return lines.toMutableList().also { it[beta] = "SET portal \"$portal\"" }
+}
+
+// Without a fixed portal for the flavor, use the install's region (US, EU, ...), as Battle.net does.
 private fun portalOf(root: File): String? =
     BuildConfig.PORTAL.ifBlank { WowClientDownloader.readBuildInfo(File(root, BUILD_INFO))?.get("Branch").orEmpty().uppercase() }
         .takeIf { it.isNotBlank() }
