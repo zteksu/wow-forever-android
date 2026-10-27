@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Color
 import android.os.Build
+import android.os.Environment
 import android.os.SystemClock
 import android.util.Log
 import android.view.Display
@@ -3595,21 +3596,30 @@ private fun setupXEnvironment(
     val enableWineDebug = PrefManager.enableWineDebug
     val enableBox86Logs = WinlatorPrefManager.getBoolean("enable_box86_64_logs", false)
     val wineDebugChannels = PrefManager.wineDebugChannels
+    // The x86 MPQ client (OctoWoW) is the least proven path and has no debug settings screen, so it always
+    // writes Wine's errors to Download/, where players can open and share it without a PC.
+    val launchLog = BuildConfig.MPQ_CLIENT
     // explicitly enable or disable Wine debug channels
     envVars.put(
         "WINEDEBUG",
         if (enableWineDebug && wineDebugChannels.isNotEmpty())
             "+" + wineDebugChannels.replace(",", ",+")
+        else if (launchLog)
+            "fixme-all"
         else
             "-all",
     )
     // capture debug output to file if either Wine or Box86/64 logging is enabled
     var logFile: File? = null
-    val captureLogs = enableWineDebug || enableBox86Logs
+    val captureLogs = enableWineDebug || enableBox86Logs || launchLog
     if (captureLogs) {
-        val wineLogDir = File(context.getExternalFilesDir(null), "wine_logs")
+        val wineLogDir = if (launchLog) {
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        } else {
+            File(context.getExternalFilesDir(null), "wine_logs")
+        }
         wineLogDir.mkdirs()
-        logFile = File(wineLogDir, "wine_debug.log")
+        logFile = File(wineLogDir, if (launchLog) "${BuildConfig.GAME_NAME}-launch.log" else "wine_debug.log")
         if (logFile.exists()) logFile.delete()
     }
 
@@ -3645,6 +3655,15 @@ private fun setupXEnvironment(
             getWineStartCommand(context, appId, container, envVars, guestProgramLauncherComponent) +
             (if (container.execArgs.isNotEmpty()) " " + container.execArgs else "")
         guestProgramLauncherComponent.guestExecutable = gameExecutable
+        if (launchLog) {
+            runCatching {
+                logFile?.appendText(
+                    "${BuildConfig.GAME_NAME} ${BuildConfig.VERSION_NAME} on ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}\n" +
+                        "emulator=${container.emulator} wine=${container.wineVersion} driver=${container.graphicsDriverVersion}\n" +
+                        "command: $gameExecutable\n\n",
+                )
+            }
+        }
         guestProgramLauncherComponent.isWoW64Mode = wow64Mode
         // Set steam type for selecting appropriate box64rc
         guestProgramLauncherComponent.setSteamType(container.getSteamType())
@@ -3766,6 +3785,7 @@ private fun setupXEnvironment(
     guestProgramLauncherComponent.envVars = EnvVars().apply { putAll(envVars) }
 
     val gameTerminationCallback = Callback<Int> { status ->
+        if (launchLog) runCatching { logFile?.appendText("\nGame process exited with status $status\n") }
         if (status != 0) {
             Timber.e("Guest program terminated with status: $status")
             onGameLaunchError?.invoke("Game terminated with error status: $status")
