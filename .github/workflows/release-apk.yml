@@ -81,7 +81,10 @@ jobs:
           } > app/keystores/keystore.properties
 
       - name: Build
-        run: ./gradlew :app:assembleOctoModernRelease
+        run: |
+          # The secrets Gradle plugin fails without local.properties, which is gitignored.
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          ./gradlew :app:assembleOctoModernRelease
 
       - name: Collect APK
         run: |
