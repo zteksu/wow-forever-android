@@ -1,0 +1,14 @@
+## Interface: 11200
+## Title: |cff33ccffOcto|cffffffffPad
+## Notes: WoW Forever's gamepad mode for the 1.12 client: trigger layers, bumper targeting, class flyouts, radial menu and D-pad menu navigation.
+## Author: wow-forever-android
+## Version: 1.0
+## SavedVariables: OctoPadDB
+## SavedVariablesPerCharacter: OctoPadCharDB
+
+core.lua
+actions.lua
+targeting.lua
+menus.lua
+nav.lua
+options.lua

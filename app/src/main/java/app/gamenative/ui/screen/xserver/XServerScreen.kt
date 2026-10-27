@@ -25,6 +25,9 @@ import android.view.InputDevice
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import app.gamenative.BuildConfig
+import app.gamenative.ui.screen.wow.GamePath
+import app.gamenative.ui.screen.wow.MpqClient
+import app.gamenative.ui.screen.wow.OctoPadBridge
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -511,6 +514,7 @@ fun XServerScreen(
 
     var win32AppWorkarounds: Win32AppWorkarounds? by remember { mutableStateOf(null) }
     var physicalControllerHandler: PhysicalControllerHandler? by remember { mutableStateOf(null) }
+    var octoPadBridge: OctoPadBridge? by remember { mutableStateOf(null) }
     var exitWatchJob: Job? by remember { mutableStateOf(null) }
     val keyboardEscMenuHandler = remember(scope) { KeyboardEscMenuHandler(scope) }
 
@@ -518,6 +522,8 @@ fun XServerScreen(
         onDispose {
             PluviaApp.radialMenuCoordinator?.detach()
             PluviaApp.radialMenuCoordinator = null
+            octoPadBridge?.stop()
+            octoPadBridge = null
             physicalControllerHandler?.cleanup()
             physicalControllerHandler = null
             exitWatchJob?.cancel()
@@ -2377,6 +2383,14 @@ fun XServerScreen(
                         },
                     )
                     radialMenuCoordinator?.bindPhysicalControllerHandler(physicalControllerHandler)
+                    octoPadBridge?.stop()
+                    octoPadBridge = physicalControllerHandler?.camera
+                        ?.takeIf { BuildConfig.MPQ_CLIENT && MpqClient.controllerLayout(context) == MpqClient.ControllerLayout.OCTOPAD }
+                        ?.let { camera ->
+                            OctoPadBridge(OctoPadBridge.stateFile(File(GamePath.load(context))), camera) {
+                                PluviaApp.inputControlsView?.triggerShowKeyboard()
+                            }.apply { start() }
+                        }
 
                     // Store profile for auto-show logic
                     loadedProfile = targetProfile

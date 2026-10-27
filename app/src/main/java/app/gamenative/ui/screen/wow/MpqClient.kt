@@ -16,13 +16,25 @@ import timber.log.Timber
 object MpqClient {
     private const val VANILLA_FIXES = "VanillaFixes.exe"
     private const val ADDON = "ShaguController"
+    private const val DLLS_TXT = "dlls.txt"
+    private const val VANILLA_HELPERS = "VanillaHelpers.dll"
     private const val PREFS = "octo_client"
     private const val KEY_LAYOUT = "controller_layout"
 
-    /** The controller addon in use, each with its own key layout and controller profile. */
-    enum class ControllerLayout(val title: String, val addonFolder: String, val profileId: Int, val profileName: String) {
-        SHAGU("ShaguController", ADDON, 900, "OctoWoW Controller"),
-        CONSOLE_EXPERIENCE("ConsoleExperience", "ConsoleExperienceClassic", 901, "OctoWoW ConsoleExperience"),
+    /**
+     * The controller addon in use, each with its own key layout and controller profile. [bundled] addons ship
+     * in the APK; the others are downloaded when picked.
+     */
+    enum class ControllerLayout(
+        val title: String,
+        val addonFolder: String,
+        val profileId: Int,
+        val profileName: String,
+        val bundled: Boolean,
+    ) {
+        SHAGU("ShaguController", ADDON, 900, "OctoWoW Controller", true),
+        CONSOLE_EXPERIENCE("ConsoleExperience", "ConsoleExperienceClassic", 901, "OctoWoW ConsoleExperience", false),
+        OCTOPAD("Forever Gamepad", "OctoPad", 902, "OctoWoW Forever Gamepad", true),
     }
 
     fun controllerLayout(context: Context): ControllerLayout =
@@ -41,18 +53,37 @@ object MpqClient {
         if (File(gameRoot, VANILLA_FIXES).isFile) VANILLA_FIXES else WowClientDownloader.EXE_NAME
 
     /**
-     * Copies the bundled ShaguController addon into Interface/AddOns unless the player already has it, or
-     * has switched to ConsoleExperience in the Add-ons menu.
+     * Copies the current layout's addon into Interface/AddOns if it ships in the APK. ShaguController is
+     * left alone once the player has it; OctoPad is refreshed so app updates bring its fixes along.
      */
     fun installControllerAddon(context: Context, gameRoot: File) {
-        if (controllerLayout(context) == ControllerLayout.SHAGU) installBundledShagu(context, gameRoot)
+        val layout = controllerLayout(context)
+        if (layout.bundled) installBundled(context, gameRoot, layout)
+        if (layout == ControllerLayout.OCTOPAD) enableVanillaHelpers(gameRoot)
     }
 
-    internal fun installBundledShagu(context: Context, gameRoot: File) {
-        val dest = File(gameRoot, "Interface/AddOns/$ADDON")
-        if (File(dest, "$ADDON.toc").isFile) return
-        runCatching { copyAssetDir(context, "addons/$ADDON", dest) }
-            .onFailure { Timber.e(it, "Failed to install $ADDON") }
+    internal fun installBundled(context: Context, gameRoot: File, layout: ControllerLayout) {
+        val name = layout.addonFolder
+        val dest = File(gameRoot, "Interface/AddOns/$name")
+        if (layout == ControllerLayout.SHAGU && File(dest, "$name.toc").isFile) return
+        runCatching {
+            dest.deleteRecursively()
+            copyAssetDir(context, "addons/$name", dest)
+        }.onFailure { Timber.e(it, "Failed to install $name") }
+    }
+
+    /**
+     * OctoPad tells the app when a menu wants the pointer through VanillaHelpers' WriteFile. OctoWoW ships the
+     * DLL; this makes sure VanillaFixes loads it.
+     */
+    internal fun enableVanillaHelpers(gameRoot: File) {
+        val list = File(gameRoot, DLLS_TXT)
+        if (!list.isFile || !File(gameRoot, VANILLA_HELPERS).isFile) return
+        val lines = list.readLines()
+        if (lines.any { it.trim().equals(VANILLA_HELPERS, ignoreCase = true) }) return
+        val text = list.readText()
+        list.writeText(text + (if (text.isEmpty() || text.endsWith("\n")) "" else "\n") + VANILLA_HELPERS + "\n")
+        Timber.i("Added $VANILLA_HELPERS to $DLLS_TXT")
     }
 
     private fun copyAssetDir(context: Context, assetPath: String, dest: File) {
@@ -86,6 +117,7 @@ object MpqClient {
     private fun bindings(layout: ControllerLayout) = when (layout) {
         ControllerLayout.SHAGU -> SHAGU_BINDINGS
         ControllerLayout.CONSOLE_EXPERIENCE -> CONSOLE_EXPERIENCE_BINDINGS
+        ControllerLayout.OCTOPAD -> OCTOPAD_BINDINGS
     }
 
     // Android key codes for gamepad buttons, and the stick-direction pseudo codes the profiles use.
@@ -145,6 +177,37 @@ object MpqClient {
         -8 to "MOUSE_MOVE_DOWN",
         -5 to "MOUSE_MOVE_LEFT",
         -6 to "MOUSE_MOVE_RIGHT",
+    )
+
+    // OctoPad reads every button as its own key and works out layers, modifiers and menus itself, the way
+    // WoW Forever's gamepad mode does. The sticks drive the app's gamepad camera: the left stick moves
+    // (steering the camera so movement is camera-relative), the right stick looks around or points.
+    private val OCTOPAD_BINDINGS = listOf<Pair<Int, Any>>(
+        96 to "KEY_F1", // A
+        97 to "KEY_F2", // B
+        99 to listOf("INTERACT_CLICK", "KEY_F3"), // X: interact with what's in front of you
+        100 to "KEY_F4", // Y
+        19 to "KEY_F5", // D-pad up
+        22 to "KEY_F6", // D-pad right
+        20 to "KEY_F7", // D-pad down
+        21 to "KEY_F8", // D-pad left
+        102 to "KEY_F9", // LB
+        103 to "KEY_F10", // RB
+        104 to "KEY_F11", // LT
+        105 to "KEY_F12", // RT
+        106 to "KEY_KP_DIVIDE", // L3
+        107 to "KEY_KP_MULTIPLY", // R3
+        108 to "KEY_KP_SUBTRACT", // Start: radial menu
+        109 to "POINTER_MODE", // Select: pointer, like the touchpad
+        110 to "OPEN_NAVIGATION_MENU",
+        -3 to listOf("CAMERA_STEER", "KEY_W"),
+        -4 to listOf("CAMERA_STEER", "KEY_S"),
+        -1 to listOf("CAMERA_STEER", "KEY_A"),
+        -2 to listOf("CAMERA_STEER", "KEY_D"),
+        -7 to "CAMERA_LOOK_UP",
+        -8 to "CAMERA_LOOK_DOWN",
+        -5 to "CAMERA_LOOK_LEFT",
+        -6 to "CAMERA_LOOK_RIGHT",
     )
 
     // id, name and cursorSpeed must come first: InputControlsManager reads them with a streaming parser.

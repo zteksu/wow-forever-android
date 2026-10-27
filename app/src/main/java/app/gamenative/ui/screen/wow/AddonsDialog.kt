@@ -1,6 +1,7 @@
 package app.gamenative.ui.screen.wow
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -123,7 +125,7 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
 
             Text("Controller layout", color = WowMuted, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 MpqClient.ControllerLayout.entries.forEach { option ->
                     FilterChip(
                         selected = layout == option,
@@ -145,6 +147,9 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
                     MpqClient.ControllerLayout.SHAGU -> "Steam Deck-style bars. Sticks move and aim, triggers click, face buttons and D-pad are actions."
                     MpqClient.ControllerLayout.CONSOLE_EXPERIENCE ->
                         "ConsolePort-style UI (alpha): hold LT/RT for more bars, Start opens the radial menu, D-pad navigates menus. Type /ce in game to configure."
+                    MpqClient.ControllerLayout.OCTOPAD ->
+                        "WoW Forever's gamepad mode: LT/RT layers, bumpers target, LB+RB shortcuts, class flyouts, Start radial menu, " +
+                            "D-pad menus and a free camera. Select toggles the pointer. Type /octopad in game for options."
                 },
                 color = WowSubtle,
                 fontSize = 11.sp,

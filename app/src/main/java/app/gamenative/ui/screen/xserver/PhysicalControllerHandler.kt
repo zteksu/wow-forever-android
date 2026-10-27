@@ -16,6 +16,7 @@ import com.winlator.inputcontrols.ExternalControllerBinding
 import com.winlator.inputcontrols.GamepadState
 import com.winlator.inputcontrols.JoyConSupport
 import com.winlator.math.Mathf
+import com.winlator.xserver.Pointer
 import com.winlator.xserver.XServer
 import java.util.Timer
 import java.util.TimerTask
@@ -71,6 +72,22 @@ class PhysicalControllerHandler(
     private val activeSequenceBindings = mutableMapOf<Binding, Int>()
     private val activeSequenceGyroSources = mutableSetOf<PhysicalInputSource>()
     private val activeGyroModifierSources = mutableSetOf<PhysicalInputSource>()
+
+    /** Mouse-driven gamepad camera for the CAMERA_ and pointer bindings (the OctoPad layout). */
+    val camera: GamepadCamera? = xServer?.let { server ->
+        GamepadCamera(
+            object : GamepadCamera.Sink {
+                override val width get() = server.screenInfo.width.toInt()
+                override val height get() = server.screenInfo.height.toInt()
+                override fun press(button: Pointer.Button) = server.injectPointerButtonPress(button)
+                override fun release(button: Pointer.Button) = server.injectPointerButtonRelease(button)
+                override fun moveBy(dx: Int, dy: Int) = server.injectPointerMoveDelta(dx, dy)
+                override fun moveTo(x: Int, y: Int) = server.injectPointerMove(x, y)
+            },
+            speed = { profile?.cursorSpeed ?: 1f },
+        )
+    }
+    private val heldBumpers = mutableSetOf<Int>()
 
     // Tracks whether SHOW_KEYBOARD is currently held, so onShowKeyboard fires once per press (rising edge only)
     private var showKeyboardPressed = false
@@ -134,6 +151,7 @@ class PhysicalControllerHandler(
         clearScrollRepeats()
         closeRadialMenuIfOpen(commit = false)
         activeSequenceTriggerBindings.clear()
+        resetCamera()
         sendGamepadState()
         this.profile = profile
         Log.d(TAG, "PhysicalControllerHandler: Profile set to ${profile?.name}")
@@ -153,7 +171,13 @@ class PhysicalControllerHandler(
         activeSequenceTriggerBindings.clear()
         showKeyboardPressed = false
         closeRadialMenuIfOpen(commit = false)
+        resetCamera()
         sendGamepadState()
+    }
+
+    private fun resetCamera() {
+        heldBumpers.clear()
+        camera?.reset(pointer = camera.manualPointer)
     }
 
     fun onInputDeviceRemoved(deviceId: Int) {
@@ -164,6 +188,7 @@ class PhysicalControllerHandler(
         releaseGyroModifierSources(deviceId)
         mouseMoveContributions.keys.removeAll { it.deviceId == deviceId }
         recalculateMouseMoveOffset()
+        resetCamera()
         sendGamepadState()
         if (radialMenuPressed && radialMenuOpenerDeviceId == deviceId) {
             closeRadialMenuIfOpen(commit = false)
@@ -180,6 +205,7 @@ class PhysicalControllerHandler(
             if (radialMenuPressed && !isRadialMenuOpenerDevice(event.deviceId)) return true
             val controller = profile?.getController(event.deviceId)
             if (controller != null) {
+                trackBumperChord(keyCode, event.action == KeyEvent.ACTION_DOWN)
                 val controllerBinding = controller.getControllerBinding(keyCode)
                 if (radialMenuPressed && controllerBinding?.bindingCombo?.bindings?.contains(Binding.OPEN_RADIAL_MENU) == true) {
                     if (keyCode == radialMenuOpenerKeyCode ||
@@ -213,12 +239,13 @@ class PhysicalControllerHandler(
                     }
                     val isActionDown = event.action == KeyEvent.ACTION_DOWN
                     val source = PhysicalInputSource(event.deviceId, keyCode)
+                    val pressCombo = pointerClickFor(keyCode) ?: controllerBinding.bindingCombo
                     val bindingCombo = if (!controllerBinding.bindingCombo.isSequence &&
                         Binding.OPEN_RADIAL_MENU !in controllerBinding.bindingCombo.bindings
                     ) {
                         if (isActionDown) {
-                            activeButtonBindings[source] = controllerBinding.bindingCombo
-                            controllerBinding.bindingCombo
+                            activeButtonBindings[source] = pressCombo
+                            pressCombo
                         } else {
                             activeButtonBindings.remove(source) ?: controllerBinding.bindingCombo
                         }
@@ -244,6 +271,40 @@ class PhysicalControllerHandler(
         }
         return false
     }
+
+    /** LB+RB held turns the camera stick into zoom. */
+    private fun trackBumperChord(keyCode: Int, down: Boolean) {
+        if (keyCode != KeyEvent.KEYCODE_BUTTON_L1 && keyCode != KeyEvent.KEYCODE_BUTTON_R1) return
+        if (down) heldBumpers.add(keyCode) else heldBumpers.remove(keyCode)
+        camera?.zoomChord = heldBumpers.size == 2
+    }
+
+    /** In hand-picked pointer mode A and B are the mouse buttons, like a gamepad cursor. */
+    private fun pointerClickFor(keyCode: Int): BindingCombo? {
+        if (camera?.manualPointer != true) return null
+        return when (keyCode) {
+            KeyEvent.KEYCODE_BUTTON_A -> BindingCombo.of(Binding.MOUSE_LEFT_BUTTON)
+            KeyEvent.KEYCODE_BUTTON_B -> BindingCombo.of(Binding.MOUSE_RIGHT_BUTTON)
+            else -> null
+        }
+    }
+
+    private fun handleCameraBinding(binding: Binding, isActionDown: Boolean, offset: Float, source: PhysicalInputSource) {
+        val camera = camera ?: return
+        when (binding) {
+            Binding.CAMERA_LOOK_UP -> camera.setLook(GamepadCamera.Look.UP, lookValue(isActionDown, offset))
+            Binding.CAMERA_LOOK_RIGHT -> camera.setLook(GamepadCamera.Look.RIGHT, lookValue(isActionDown, offset))
+            Binding.CAMERA_LOOK_DOWN -> camera.setLook(GamepadCamera.Look.DOWN, lookValue(isActionDown, offset))
+            Binding.CAMERA_LOOK_LEFT -> camera.setLook(GamepadCamera.Look.LEFT, lookValue(isActionDown, offset))
+            Binding.CAMERA_STEER -> camera.setSteer(source, isActionDown)
+            Binding.POINTER_MODE -> if (isActionDown) camera.togglePointer()
+            Binding.INTERACT_CLICK -> if (isActionDown) camera.interactClick()
+            else -> {}
+        }
+    }
+
+    // A button bound to a look direction has no deflection, so it turns at full speed.
+    private fun lookValue(isActionDown: Boolean, offset: Float) = if (!isActionDown) 0f else if (offset != 0f) offset else 1f
 
     private fun deviceHasTriggerAxis(device: InputDevice?, keyCode: Int): Boolean {
         return when (keyCode) {
@@ -779,6 +840,11 @@ class PhysicalControllerHandler(
 
         if (binding == Binding.GYRO_MODIFIER) {
             setGyroModifierPressed(sourceDeviceId, sourceKeyCode, sourceController, isActionDown)
+            return
+        }
+
+        if (binding.isGamepadCamera) {
+            handleCameraBinding(binding, isActionDown, offset, physicalInputSource(sourceDeviceId, sourceKeyCode, sourceController))
             return
         }
 

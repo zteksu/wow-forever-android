@@ -235,8 +235,8 @@ object AddonManager {
     // ---- Controller layout ----
 
     /**
-     * Activates the addon behind [layout] and parks the other controller addon in AddOns-disabled, since
-     * both rebind the same keys. ConsoleExperience is downloaded the first time it is chosen.
+     * Activates the addon behind [layout] and parks the other controller addons in AddOns-disabled, since
+     * they rebind the same keys. ConsoleExperience is downloaded the first time it is chosen.
      */
     fun applyControllerLayout(context: Context, gameRoot: File, layout: MpqClient.ControllerLayout, onStatus: (String) -> Unit) {
         val addons = addonsDir(gameRoot)
@@ -245,11 +245,13 @@ object AddonManager {
         val wanted = File(addons, layout.addonFolder)
         val parked = File(disabled, layout.addonFolder)
         when {
+            layout.bundled -> {
+                parked.deleteRecursively()
+                MpqClient.installBundled(context, gameRoot, layout)
+            }
             wanted.isDirectory -> Unit
             parked.isDirectory -> parked.renameTo(wanted)
-            layout == MpqClient.ControllerLayout.CONSOLE_EXPERIENCE ->
-                installOne(context, gameRoot, CONSOLE_EXPERIENCE, onStatus)
-            else -> MpqClient.installBundledShagu(context, gameRoot)
+            else -> installOne(context, gameRoot, CONSOLE_EXPERIENCE, onStatus)
         }
         for (other in MpqClient.ControllerLayout.entries.filter { it != layout }) {
             val active = File(addons, other.addonFolder)

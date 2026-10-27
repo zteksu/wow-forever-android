@@ -1688,7 +1688,8 @@ public class InputControlsView extends View {
     }
 
     public void handleInputEvent(Binding binding, boolean isActionDown, float offset, Object source) {
-        if (binding == null || binding == Binding.NONE) return;
+        // Gamepad camera bindings only apply to physical controllers (PhysicalControllerHandler).
+        if (binding == null || binding == Binding.NONE || binding.isGamepadCamera()) return;
 
         if (binding == Binding.GYRO_MODIFIER) {
             setGyroModifierPressed(source, isActionDown);

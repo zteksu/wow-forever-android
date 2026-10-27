@@ -150,7 +150,33 @@ Release builds are signed with `app/keystores/keystore.properties` when it exist
 - Installs the [ShaguController](https://github.com/shagu/ShaguController) addon into `Interface/AddOns/` and maps the controller to the keys it expects: left stick moves, right stick moves the mouse, L2/R2 are right/left click, A jumps, Y/X/B and the D-pad are action buttons, L1/R1 cycle targets, Select opens the map, Start is Escape, L3 opens bags and R3 the quest log.
 - **Game updates:** checks OctoWoW's client torrent (`dl.octowow.st/download/client.torrent`) on launch, the same manifest its own launcher uses. **Update** downloads only the changed files over HTTPS from the torrent's web mirror and verifies them against the torrent's SHA-1 piece hashes. The last applied torrent is kept in `.octowow-android/` in the client folder. **Verify Game Files** re-checks every file and repairs any that don't match.
 - **Add-ons:** browses OctoWoW's addon catalog (`octowow.st/api/addons.json`, the list its launcher offers) with search, and installs, updates or removes addons in `Interface/AddOns/`, along with any catalog addons they require.
-- **Controller layout** (in Add-ons): ShaguController, or [ConsoleExperience Classic](https://github.com/pepordev/ConsoleExperienceClassic), a ConsolePort-style UI for 1.12 (face buttons, D-pad and bumpers are keys 1-0, LT/RT are held Shift/Ctrl for three more bars, Start is Shift+Escape for its radial menu, Select opens the map). The unused one is parked in `Interface/AddOns-disabled/`.
+- **Controller layout** (in Add-ons): ShaguController, [ConsoleExperience Classic](https://github.com/pepordev/ConsoleExperienceClassic), a ConsolePort-style UI for 1.12 (face buttons, D-pad and bumpers are keys 1-0, LT/RT are held Shift/Ctrl for three more bars, Start is Shift+Escape for its radial menu, Select opens the map), or **Forever Gamepad** (below). The unused ones are parked in `Interface/AddOns-disabled/`.
+
+#### Forever Gamepad (OctoPad)
+
+The bundled OctoPad addon (`app/src/octo/assets/addons/OctoPad`) recreates WoW Forever's Gamepad (Alpha) controls on the 1.12 client. It is original code: Forever's own UI is built on engine gamepad support (`C_GamePad`, Edit Mode) that 1.12 doesn't have, so the controller profile sends each button as its own key (F1-F12, numpad `/ * -`) and the addon works out layers, modifiers and menus. The sticks are handled by the app.
+
+| Input | Action |
+| :--- | :--- |
+| Left stick | Move, camera-relative (the app steers with a right-button drag, so the turn keys strafe) |
+| Right stick | Orbit the camera; drives the pointer while a menu is open |
+| A / X / Y / B | Jump / interact (right-clicks the reticle: talk, loot, attack what's in front) / unit menu / cancel or clear target |
+| LT, RT, LT+RT + D-pad or face button | Three layers of 8 actions; D-pad alone is 4 more, shared by every arrangement |
+| LB+RB + D-pad left/right | Switch between three bar arrangements |
+| RB tap / LB tap | Target the enemy ahead (again: next enemy) / a friend |
+| Hold RB + button | Hostile targeting: D-pad left/right cycle enemies, up nearest, down last; A attack, X next marked, Y mark, B clear |
+| Hold LB + button | Friendly targeting: A self, X pet, B assist, Y mark; D-pad moves through the group frames (Fixed Party Targeting: one D-pad direction per party member) |
+| LB+RB + B / X / Y / up / down | Bags / sheathe / buff viewer / quest log / chat with the on-screen keyboard |
+| LB+RB + right stick / L3 / hold R3 | Zoom / recenter the camera / look behind |
+| L3 / R3 | Auto-run / ping your position |
+| Start | Radial menu: character, spellbook, talents, professions, bags, quests, map, chat, game menu; LB/RB switch to the social and system tabs; D-pad up opens emotes, down sits |
+| Select | Pointer mode (like Forever's touchpad): the right stick moves the mouse, A and B click |
+
+With a window open (vendor, quest, bags, spellbook, loot, popups, ...), the D-pad moves a highlight, A clicks, X is the secondary action (use or equip an item, buy or sell, bind a spell), Y opens a context menu (bind, split, destroy, share or abandon a quest), B goes back, LT/RT switch windows and the bumpers switch tabs. Bind spells and items to the bar as in Forever: X on a spell in the spellbook (or Y, *Bind to Action Bar* on an item), then press the button combination. Ground-targeted spells switch to pointer mode with A to place them and B to cancel.
+
+Classes with stances, forms or auras get a flyout on D-pad left, hunters and warlocks pet control and pet spell flyouts on D-pad down and right; open one and pick with the button shown under each choice. `/octopad` (or *Gamepad Options* in the radial menu) has Forever's options (Compact Action Bar, Fixed Party Targeting, Swap Target Modifier Sides, Swap Friendly/Hostile Target Action Sides) plus camera speed, bar size, placing flyouts, clearing a slot and moving the bar.
+
+The addon tells the app when a menu wants the pointer through VanillaHelpers' `WriteFile` (`VanillaHelpersData/OctoPad.txt`); the app adds `VanillaHelpers.dll` to `dlls.txt` if it's missing. Without it, the camera starts in pointer mode for the login screens and Select switches modes by hand. Targeting uses UnitXP_SP3's facing- and distance-aware functions when the client has them. Tests: `python3 tools/octopad_test/test_octopad.py` (needs `pip install lupa`) and `python3 tools/lint_lua50.py app/src/octo/assets/addons/OctoPad` (the client runs Lua 5.0).
 
 Each app has its own branch and release series:
 
