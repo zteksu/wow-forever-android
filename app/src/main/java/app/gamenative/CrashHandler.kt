@@ -90,6 +90,7 @@ class CrashHandler(
     }
 
     override fun uncaughtException(thread: Thread, throwable: Throwable) {
+        timber.log.Timber.e(throwable, "Uncaught exception on thread ${thread.name}")
         saveCrashToFile(throwable)
         defaultHandler?.uncaughtException(thread, throwable)
     }
