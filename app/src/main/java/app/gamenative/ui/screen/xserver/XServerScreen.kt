@@ -3605,10 +3605,16 @@ private fun setupXEnvironment(
         if (enableWineDebug && wineDebugChannels.isNotEmpty())
             "+" + wineDebugChannels.replace(",", ",+")
         else if (launchLog)
-            "fixme-all"
+            // Which processes start, which DLLs load and any crash, so a silent exit can be traced.
+            "fixme-all,+process,+loaddll,+seh,warn+module"
         else
             "-all",
     )
+    if (launchLog) {
+        // wowbox64, which runs the 32-bit client, logs its own startup and crashes with these.
+        envVars.put("BOX64_LOG", "1")
+        envVars.put("BOX64_SHOWSEGV", "1")
+    }
     // capture debug output to file if either Wine or Box86/64 logging is enabled
     var logFile: File? = null
     val captureLogs = enableWineDebug || enableBox86Logs || launchLog
