@@ -16,8 +16,22 @@ import timber.log.Timber
 object MpqClient {
     private const val VANILLA_FIXES = "VanillaFixes.exe"
     private const val ADDON = "ShaguController"
-    private const val PROFILE_ID = 900
-    private const val PROFILE_NAME = "OctoWoW Controller"
+    private const val PREFS = "octo_client"
+    private const val KEY_LAYOUT = "controller_layout"
+
+    /** The controller addon in use, each with its own key layout and controller profile. */
+    enum class ControllerLayout(val title: String, val addonFolder: String, val profileId: Int, val profileName: String) {
+        SHAGU("ShaguController", ADDON, 900, "OctoWoW Controller"),
+        CONSOLE_EXPERIENCE("ConsoleExperience", "ConsoleExperienceClassic", 901, "OctoWoW ConsoleExperience"),
+    }
+
+    fun controllerLayout(context: Context): ControllerLayout =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_LAYOUT, null)
+            ?.let { name -> ControllerLayout.entries.firstOrNull { it.name == name } } ?: ControllerLayout.SHAGU
+
+    fun setControllerLayout(context: Context, layout: ControllerLayout) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_LAYOUT, layout.name).apply()
+    }
 
     /**
      * VanillaFixes starts WoW.exe and injects the client mods listed in dlls.txt (nampower, UnitXP, ...),
@@ -26,8 +40,15 @@ object MpqClient {
     fun launchExe(gameRoot: File): String =
         if (File(gameRoot, VANILLA_FIXES).isFile) VANILLA_FIXES else WowClientDownloader.EXE_NAME
 
-    /** Copies the bundled ShaguController addon into Interface/AddOns unless the player already has it. */
+    /**
+     * Copies the bundled ShaguController addon into Interface/AddOns unless the player already has it, or
+     * has switched to ConsoleExperience in the Add-ons menu.
+     */
     fun installControllerAddon(context: Context, gameRoot: File) {
+        if (controllerLayout(context) == ControllerLayout.SHAGU) installBundledShagu(context, gameRoot)
+    }
+
+    internal fun installBundledShagu(context: Context, gameRoot: File) {
         val dest = File(gameRoot, "Interface/AddOns/$ADDON")
         if (File(dest, "$ADDON.toc").isFile) return
         runCatching { copyAssetDir(context, "addons/$ADDON", dest) }
@@ -45,23 +66,30 @@ object MpqClient {
     }
 
     /**
-     * Gives the container a controller profile that turns gamepad input into the keyboard and mouse
-     * layout ShaguController binds (the Steam Deck "Keyboard (WASD) and Mouse" template). A profile the
-     * player already picked or edited is left alone.
+     * Gives the container the controller profile for the current layout, turning gamepad input into the
+     * keys its addon binds. Each layout has its own profile, so edits the player makes to one survive
+     * switching; a profile the player picked themselves is left alone.
      */
     fun applyControllerProfile(context: Context, container: Container) {
         // Load the stock profiles first: the manager only copies them into an empty profiles folder.
         InputControlsManager(context).getProfiles()
-        val file = ControlsProfile.getProfileFile(context, PROFILE_ID)
-        if (!file.isFile) file.writeText(controllerProfile().toString())
-        if (container.getExtra("profileId", "0") == "0") {
-            container.putExtra("profileId", PROFILE_ID.toString())
+        val layout = controllerLayout(context)
+        val file = ControlsProfile.getProfileFile(context, layout.profileId)
+        if (!file.isFile) file.writeText(controllerProfile(layout).toString())
+        val ours = setOf("0") + ControllerLayout.entries.map { it.profileId.toString() }
+        if (container.getExtra("profileId", "0") in ours && container.getExtra("profileId", "0") != layout.profileId.toString()) {
+            container.putExtra("profileId", layout.profileId.toString())
             container.saveData()
         }
     }
 
+    private fun bindings(layout: ControllerLayout) = when (layout) {
+        ControllerLayout.SHAGU -> SHAGU_BINDINGS
+        ControllerLayout.CONSOLE_EXPERIENCE -> CONSOLE_EXPERIENCE_BINDINGS
+    }
+
     // Android key codes for gamepad buttons, and the stick-direction pseudo codes the profiles use.
-    private val CONTROLLER_BINDINGS = listOf(
+    private val SHAGU_BINDINGS = listOf<Pair<Int, Any>>(
         96 to "KEY_SPACE", // A: jump
         97 to "KEY_E", // B: action button 3
         99 to "KEY_R", // X: action button 2
@@ -89,10 +117,40 @@ object MpqClient {
         -6 to "MOUSE_MOVE_RIGHT",
     )
 
+    // ConsoleExperience's documented layout: face buttons, D-pad and bumpers are 1-0, and the triggers are
+    // held Shift and Ctrl to reach its other three bars. Start is Shift+Escape, its radial menu.
+    private val CONSOLE_EXPERIENCE_BINDINGS = listOf<Pair<Int, Any>>(
+        96 to "KEY_1", // A
+        99 to "KEY_2", // X
+        100 to "KEY_3", // Y
+        97 to "KEY_4", // B
+        20 to "KEY_5", // D-pad down
+        21 to "KEY_6", // D-pad left
+        19 to "KEY_7", // D-pad up
+        22 to "KEY_8", // D-pad right
+        103 to "KEY_9", // RB
+        102 to "KEY_0", // LB
+        104 to "KEY_SHIFT_L", // LT: second bar
+        105 to "KEY_CTRL_L", // RT: third bar (both: fourth)
+        108 to listOf("KEY_SHIFT_L", "KEY_ESC"), // Start: radial menu
+        109 to "KEY_M", // Select: world map
+        106 to "MOUSE_LEFT_BUTTON", // L3
+        107 to "MOUSE_RIGHT_BUTTON", // R3: interact
+        110 to "OPEN_NAVIGATION_MENU",
+        -3 to "KEY_W",
+        -4 to "KEY_S",
+        -1 to "KEY_A",
+        -2 to "KEY_D",
+        -7 to "MOUSE_MOVE_UP",
+        -8 to "MOUSE_MOVE_DOWN",
+        -5 to "MOUSE_MOVE_LEFT",
+        -6 to "MOUSE_MOVE_RIGHT",
+    )
+
     // id, name and cursorSpeed must come first: InputControlsManager reads them with a streaming parser.
-    private fun controllerProfile() = JSONObject().apply {
-        put("id", PROFILE_ID)
-        put("name", PROFILE_NAME)
+    private fun controllerProfile(layout: ControllerLayout) = JSONObject().apply {
+        put("id", layout.profileId)
+        put("name", layout.profileName)
         put("cursorSpeed", 1)
         put("elements", JSONArray())
         put(
@@ -104,8 +162,11 @@ object MpqClient {
                     put(
                         "controllerBindings",
                         JSONArray().apply {
-                            CONTROLLER_BINDINGS.forEach { (keyCode, binding) ->
-                                put(JSONObject().put("keyCode", keyCode).put("binding", binding))
+                            bindings(layout).forEach { (keyCode, binding) ->
+                                val entry = JSONObject().put("keyCode", keyCode)
+                                // A list is a key combo, pressed together.
+                                if (binding is List<*>) entry.put("bindings", JSONArray(binding)) else entry.put("binding", binding)
+                                put(entry)
                             }
                         },
                     )

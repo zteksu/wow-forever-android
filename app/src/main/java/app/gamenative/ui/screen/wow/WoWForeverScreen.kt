@@ -16,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.PlayArrow
@@ -99,6 +101,7 @@ fun WoWForeverScreen(
     var hasSavedLogin by remember { mutableStateOf(BuildConfig.MPQ_CLIENT || BattleNetSignIn.load(context) != null) }
     var showLoginDialog by remember { mutableStateOf(false) }
     var showLogsDialog by remember { mutableStateOf(false) }
+    var showAddonsDialog by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showStoragePermissionDialog by remember { mutableStateOf(false) }
@@ -166,12 +169,14 @@ fun WoWForeverScreen(
 
     suspend fun fetchVersionStatus() {
         isCheckingVersion = true
-        versionStatus = withContext(Dispatchers.IO) { WowClientDownloader.checkVersion(File(gamePath)) }
+        versionStatus = withContext(Dispatchers.IO) {
+            if (BuildConfig.MPQ_CLIENT) OctoClientUpdater.check(File(gamePath)) else WowClientDownloader.checkVersion(File(gamePath))
+        }
         isCheckingVersion = false
     }
 
     fun checkVersionStatus() {
-        if (!File(gamePath, BUILD_INFO).exists()) return
+        if (!File(gamePath, INSTALL_MARKER).exists()) return
         scope.launch { fetchVersionStatus() }
     }
 
@@ -289,27 +294,31 @@ fun WoWForeverScreen(
     val filesMissing = !(files.dataExists && files.buildInfoExists)
     val canPlay = !isLaunching && !isUpdating && !filesMissing && !files.isWrongGame
 
-    fun performUpdate() {
-        val target = versionStatus ?: return
+    fun performUpdate(verifyAll: Boolean = false) {
+        val target = versionStatus ?: if (BuildConfig.MPQ_CLIENT) WowClientDownloader.VersionCheckResult("", "", false) else return
         if (isUpdating || isLaunching) return
         if (!files.hasStorageAccess) {
             showStoragePermissionDialog = true
             return
         }
         isUpdating = true
-        updateStatusText = "Connecting to Blizzard CDN..."
+        updateStatusText = if (BuildConfig.MPQ_CLIENT) "Connecting to the OctoWoW update server..." else "Connecting to Blizzard CDN..."
         errorMessage = null
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    WowClientDownloader.updateGame(File(gamePath), target) { msg ->
-                        scope.launch(Dispatchers.Main) { updateStatusText = msg }
+                    val onStatus: (String) -> Unit = { msg -> scope.launch(Dispatchers.Main) { updateStatusText = msg } }
+                    if (BuildConfig.MPQ_CLIENT) {
+                        OctoClientUpdater.update(File(gamePath), verifyAll, onStatus)
+                    } else {
+                        WowClientDownloader.updateGame(File(gamePath), target, onStatus)
                     }
                 }
                 checkFiles()
                 versionStatus = versionStatus?.copy(isOutdated = false, localVersion = target.remoteVersion)
                 isUpdating = false
-                launchGame()
+                // A manual file check only repairs; it doesn't start the game.
+                if (!verifyAll) launchGame()
             } catch (e: Exception) {
                 Timber.e(e, "Error updating game")
                 if (e.isPermissionDenied()) denyStorageAccess()
@@ -471,14 +480,22 @@ fun WoWForeverScreen(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Live servers require build ${version.remoteVersion}, but local files are build ${version.localVersion}. Logging in may fail or disconnect at realm selection.",
+                            text = if (BuildConfig.MPQ_CLIENT) {
+                                "OctoWoW published a new client (${version.remoteVersion}); your files are from ${version.localVersion}. Logging in may fail until you update."
+                            } else {
+                                "Live servers require build ${version.remoteVersion}, but local files are build ${version.localVersion}. Logging in may fail or disconnect at realm selection."
+                            },
                             fontSize = 12.sp,
                             color = Color(0xFFFED7D7),
                             lineHeight = 16.sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap Update below to download the latest files directly from Blizzard's CDN over Wi-Fi.",
+                            text = if (BuildConfig.MPQ_CLIENT) {
+                                "Tap Update below to download only the changed files from OctoWoW's servers over Wi-Fi."
+                            } else {
+                                "Tap Update below to download the latest files directly from Blizzard's CDN over Wi-Fi."
+                            },
                             fontSize = 11.sp,
                             color = Color(0xFFCBD5E1)
                         )
@@ -568,7 +585,7 @@ fun WoWForeverScreen(
                                 text = "UPDATE TO ${versionStatus?.remoteVersion}",
                                 icon = Icons.Default.Refresh,
                                 enabled = canPlay,
-                                onClick = ::performUpdate,
+                                onClick = { performUpdate() },
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             OutlinedButton(
@@ -624,7 +641,18 @@ fun WoWForeverScreen(
                             }
                         }
                     }
-                    LinkButton("View Logs", Icons.Default.Description) { showLogsDialog = true }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (BuildConfig.MPQ_CLIENT && !filesMissing) {
+                            LinkButton("Add-ons", Icons.Default.Extension) { showAddonsDialog = true }
+                            LinkButton("Verify Game Files", Icons.Default.FactCheck) {
+                                if (!isUpdating && !isLaunching) performUpdate(verifyAll = true)
+                            }
+                        }
+                        LinkButton("View Logs", Icons.Default.Description) { showLogsDialog = true }
+                    }
                 }
             }
 
@@ -641,6 +669,10 @@ fun WoWForeverScreen(
                 hasSavedLogin = true
             },
         )
+    }
+
+    if (showAddonsDialog) {
+        AddonsDialog(gameRoot = File(gamePath), onDismiss = { showAddonsDialog = false })
     }
 
     if (showLogsDialog) {
