@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.PlayArrow
@@ -97,6 +98,7 @@ fun WoWForeverScreen(
     var launchJob by remember { mutableStateOf<Job?>(null) }
     var hasSavedLogin by remember { mutableStateOf(BuildConfig.MPQ_CLIENT || BattleNetSignIn.load(context) != null) }
     var showLoginDialog by remember { mutableStateOf(false) }
+    var showLogsDialog by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showStoragePermissionDialog by remember { mutableStateOf(false) }
@@ -126,7 +128,9 @@ fun WoWForeverScreen(
     }
 
     fun installOrRequestPermission(apk: File) {
-        if (AppUpdater.canInstall(context)) {
+        val canInstall = AppUpdater.canInstall(context)
+        Timber.i("App update: install requested, canInstall=$canInstall")
+        if (canInstall) {
             AppUpdater.install(context, apk)
         } else {
             pendingInstallPermission = true
@@ -236,6 +240,9 @@ fun WoWForeverScreen(
         }
         if (appUpdate == null && !WoWLauncherState.shouldAutoLaunch) {
             checkAppUpdate()
+        }
+        if (pendingInstallPermission) {
+            Timber.i("App update: resumed while waiting for install permission, apk=$downloadedApk")
         }
         if (pendingInstallPermission && AppUpdater.canInstall(context)) {
             pendingInstallPermission = false
@@ -617,6 +624,7 @@ fun WoWForeverScreen(
                             }
                         }
                     }
+                    LinkButton("View Logs", Icons.Default.Description) { showLogsDialog = true }
                 }
             }
 
@@ -633,6 +641,10 @@ fun WoWForeverScreen(
                 hasSavedLogin = true
             },
         )
+    }
+
+    if (showLogsDialog) {
+        LogsDialog(onDismiss = { showLogsDialog = false })
     }
 
     if (showStoragePermissionDialog) {

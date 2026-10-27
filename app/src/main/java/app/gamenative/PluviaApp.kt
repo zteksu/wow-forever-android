@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.navigation.NavController
 import app.gamenative.events.EventDispatcher
 import app.gamenative.ui.screen.xserver.RadialMenuCoordinator
+import app.gamenative.utils.DiagnosticLog
 import android.app.Application
 import com.winlator.container.Container
 import com.winlator.inputcontrols.InputControlsManager
@@ -41,6 +42,7 @@ class PluviaApp : Application() {
         } else {
             Timber.plant(ReleaseTree())
         }
+        DiagnosticLog.init(this)
 
         CrashHandler.initialize(this)
         PrefManager.init(this)

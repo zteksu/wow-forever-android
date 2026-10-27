@@ -95,11 +95,14 @@ object AppUpdater {
     ): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }
         val dest = File(dir, "${BuildConfig.RELEASE_APK_PREFIX}-${release.version}.apk")
+        Timber.i("AppUpdater download v${release.version} (${release.sizeBytes} bytes) -> $dest")
         if (dest.exists() && dest.length() == release.sizeBytes && release.sizeBytes > 0) {
+            Timber.i("AppUpdater using cached APK")
             onProgress(1f)
             return@withContext dest
         }
         Net.fetchFile(release.downloadUrl, dest, onProgress)
+        Timber.i("AppUpdater download complete: ${dest.length()} bytes")
         dest
     }
 
@@ -111,6 +114,7 @@ object AppUpdater {
     }
 
     fun openInstallPermissionSettings(context: Context) {
+        Timber.i("AppUpdater opening install-permission settings")
         runCatching {
             context.startActivity(
                 Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
@@ -130,6 +134,7 @@ object AppUpdater {
     }
 
     fun install(context: Context, apkFile: File) {
+        Timber.i("AppUpdater install ${apkFile.name} (${apkFile.length()} bytes, exists=${apkFile.exists()})")
         if (!canInstall(context)) {
             openInstallPermissionSettings(context)
             return
@@ -141,5 +146,6 @@ object AppUpdater {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
+        Timber.i("AppUpdater package installer launched")
     }
 }
