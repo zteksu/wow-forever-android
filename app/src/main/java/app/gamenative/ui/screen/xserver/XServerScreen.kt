@@ -3902,8 +3902,10 @@ private fun getWineStartCommand(
         "\"A:\\${normalizedPath}\""
     }
 
-    // Only x86/x64 programs go through winhandler.exe; ARM64 ones (the WoW clients) start directly.
-    return if (args.contains("ARM64", ignoreCase = true)) args else "winhandler.exe $args"
+    // ARM64 programs (the WoW clients) start directly. So does the 32-bit MPQ client: winhandler.exe is
+    // x86-64 and needs FEX's libarm64ecfex.dll, which this app doesn't ship, while 32-bit code runs
+    // through the bundled wowbox64.
+    return if (BuildConfig.MPQ_CLIENT || args.contains("ARM64", ignoreCase = true)) args else "winhandler.exe $args"
 }
 private val LAUNCH_LOG_NOISE = listOf("I replace:", "evshim:")
 
