@@ -8,8 +8,9 @@ import kotlin.math.abs
 /**
  * WoW Forever's gamepad camera for a client that only understands a mouse (the 1.12 OctoWoW client).
  *
- * - The right stick orbits the camera while standing (a left-button drag) and steers while the left stick
- *   moves the character (a right-button drag), so movement is camera-relative and the turn keys strafe.
+ * - The right stick turns the camera and the character with it (a right-button drag), so the left stick,
+ *   which only presses movement keys, always moves the way the camera faces. A CAMERA_STEER binding holds
+ *   the same drag without turning.
  * - LB+RB with the right stick zooms (mouse wheel).
  * - Pointer mode turns the right stick into a plain pointer: on when the OctoPad addon reports an open menu,
  *   or toggled by hand, when A and B also become left and right click.
@@ -116,8 +117,7 @@ class GamepadCamera(
 
     private fun desiredButton(): Pointer.Button? = when {
         pointerMode -> null
-        steerSources.isNotEmpty() -> Pointer.Button.BUTTON_RIGHT
-        looking && !zoomChord -> Pointer.Button.BUTTON_LEFT
+        steerSources.isNotEmpty() || (looking && !zoomChord) -> Pointer.Button.BUTTON_RIGHT
         else -> null
     }
 

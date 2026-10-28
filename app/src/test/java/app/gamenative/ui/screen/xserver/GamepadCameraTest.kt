@@ -22,31 +22,32 @@ class GamepadCameraTest {
     private fun take(): List<String> = sink.log.toList().also { sink.log.clear() }
 
     @Test
-    fun lookingWhileStillOrbitsWithTheLeftButtonFromTheReticle() {
+    fun lookingTurnsWithARightButtonDragFromTheReticle() {
         camera.setLook(GamepadCamera.Look.RIGHT, 0.5f)
-        assertEquals(listOf("to 500,270", "press BUTTON_LEFT", "by 2,0", "by -2,0"), take())
+        assertEquals(listOf("to 500,270", "press BUTTON_RIGHT", "by 2,0", "by -2,0"), take())
 
         camera.tick()
         assertEquals(listOf("by 5,0"), take())
 
+        // Both axes of the stick share one drag.
+        camera.setLook(GamepadCamera.Look.UP, 0.5f)
         camera.setLook(GamepadCamera.Look.RIGHT, 0f)
-        assertEquals(listOf("release BUTTON_LEFT"), take())
+        assertEquals(emptyList<String>(), take())
+
+        camera.setLook(GamepadCamera.Look.UP, 0f)
+        assertEquals(listOf("release BUTTON_RIGHT"), take())
     }
 
     @Test
-    fun movingSteersWithTheRightButtonSoTurnKeysStrafe() {
+    fun steeringHoldsTheSameDragAcrossSources() {
+        camera.setSteer("one", true)
+        camera.setSteer("two", true)
         camera.setLook(GamepadCamera.Look.LEFT, 1f)
-        take()
-        camera.setSteer("left stick up", true)
-        assertEquals(listOf("release BUTTON_LEFT", "to 500,270", "press BUTTON_RIGHT", "by 2,0", "by -2,0"), take())
-
-        // A second stick direction doesn't press again.
-        camera.setSteer("left stick right", true)
+        assertEquals(listOf("to 500,270", "press BUTTON_RIGHT", "by 2,0", "by -2,0"), take())
         camera.setLook(GamepadCamera.Look.LEFT, 0f)
+        camera.setSteer("one", false)
         assertEquals(emptyList<String>(), take())
-
-        camera.setSteer("left stick up", false)
-        camera.setSteer("left stick right", false)
+        camera.setSteer("two", false)
         assertEquals(listOf("release BUTTON_RIGHT"), take())
     }
 
@@ -110,7 +111,7 @@ class GamepadCameraTest {
         camera.setLook(GamepadCamera.Look.UP, 1f)
         take()
         camera.reset(pointer = true)
-        assertEquals(listOf("release BUTTON_LEFT"), take())
+        assertEquals(listOf("release BUTTON_RIGHT"), take())
         assertTrue(camera.manualPointer)
     }
 }

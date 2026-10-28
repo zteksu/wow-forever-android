@@ -49,7 +49,7 @@ class OctoPadTest(unittest.TestCase):
         calls = list(lua.globals().CALLS.values())
         for key, name in [("F1", "A"), ("F12", "RT"), ("NUMPADMINUS", "START"), ("NUMPADDIVIDE", "L3")]:
             self.assertIn(f"SetBinding({key},OCTOPAD_{name})", calls)
-        self.assertIn("SetBinding(A,TURNLEFT)", calls)
+        self.assertIn("SetBinding(Q,STRAFELEFT)", calls)
 
     def test_unmodified_face_buttons_are_fixed(self):
         self.run_lua('Tap("A")')

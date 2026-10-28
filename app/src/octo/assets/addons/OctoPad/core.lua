@@ -104,8 +104,8 @@ function OP:ApplyBindings()
   for button, key in pairs(self.KEYS) do
     if bound(key) ~= "OCTOPAD_" .. button then SetBinding(key, "OCTOPAD_" .. button) end
   end
-  -- The app's left stick presses these; with the camera steering, the turn keys strafe.
-  local movement = { W = "MOVEFORWARD", S = "MOVEBACKWARD", A = "TURNLEFT", D = "TURNRIGHT" }
+  -- The app's left stick presses these: it only moves, the right stick turns.
+  local movement = { W = "MOVEFORWARD", S = "MOVEBACKWARD", Q = "STRAFELEFT", E = "STRAFERIGHT" }
   for key, action in pairs(movement) do
     if bound(key) ~= action then SetBinding(key, action) end
   end

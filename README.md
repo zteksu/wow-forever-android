@@ -158,8 +158,8 @@ The bundled OctoPad addon (`app/src/octo/assets/addons/OctoPad`) recreates WoW F
 
 | Input | Action |
 | :--- | :--- |
-| Left stick | Move, camera-relative (the app steers with a right-button drag, so the turn keys strafe) |
-| Right stick | Orbit the camera; drives the pointer while a menu is open |
+| Left stick | Move: forward/back and strafe, in the direction the camera faces |
+| Right stick | Turn the camera and your character with it (a right-button drag); drives the pointer while a menu is open |
 | A / X / Y / B | Jump / interact (right-clicks the reticle: talk, loot, attack what's in front) / unit menu / cancel or clear target |
 | LT, RT, LT+RT + D-pad or face button | Three layers of 8 actions; D-pad alone is 4 more, shared by every arrangement |
 | LB+RB + D-pad left/right | Switch between three bar arrangements |

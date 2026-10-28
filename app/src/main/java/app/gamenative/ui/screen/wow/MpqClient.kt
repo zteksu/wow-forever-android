@@ -17,6 +17,7 @@ object MpqClient {
     private const val VANILLA_FIXES = "VanillaFixes.exe"
     private const val ADDON = "ShaguController"
     private const val DLLS_TXT = "dlls.txt"
+    private const val PROFILE_VERSION = 2
     private const val VANILLA_HELPERS = "VanillaHelpers.dll"
     private const val PREFS = "octo_client"
     private const val KEY_LAYOUT = "controller_layout"
@@ -106,7 +107,13 @@ object MpqClient {
         InputControlsManager(context).getProfiles()
         val layout = controllerLayout(context)
         val file = ControlsProfile.getProfileFile(context, layout.profileId)
-        if (!file.isFile) file.writeText(controllerProfile(layout).toString())
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val versionKey = "profile_version_${layout.name}"
+        // Rewritten when our bindings change (version 2: the stick up/down codes were swapped).
+        if (!file.isFile || prefs.getInt(versionKey, 1) < PROFILE_VERSION) {
+            file.writeText(controllerProfile(layout).toString())
+            prefs.edit().putInt(versionKey, PROFILE_VERSION).apply()
+        }
         val ours = setOf("0") + ControllerLayout.entries.map { it.profileId.toString() }
         if (container.getExtra("profileId", "0") in ours && container.getExtra("profileId", "0") != layout.profileId.toString()) {
             container.putExtra("profileId", layout.profileId.toString())
@@ -139,14 +146,14 @@ object MpqClient {
         20 to "KEY_DOWN",
         21 to "KEY_LEFT",
         22 to "KEY_RIGHT",
-        -3 to "KEY_W", // Left stick: move
-        -4 to "KEY_S",
-        -1 to "KEY_A",
-        -2 to "KEY_D",
-        -7 to "MOUSE_MOVE_UP", // Right stick: mouse
-        -8 to "MOUSE_MOVE_DOWN",
-        -5 to "MOUSE_MOVE_LEFT",
-        -6 to "MOUSE_MOVE_RIGHT",
+        LEFT_STICK_UP to "KEY_W", // Left stick: move
+        LEFT_STICK_DOWN to "KEY_S",
+        LEFT_STICK_LEFT to "KEY_A",
+        LEFT_STICK_RIGHT to "KEY_D",
+        RIGHT_STICK_UP to "MOUSE_MOVE_UP", // Right stick: mouse
+        RIGHT_STICK_DOWN to "MOUSE_MOVE_DOWN",
+        RIGHT_STICK_LEFT to "MOUSE_MOVE_LEFT",
+        RIGHT_STICK_RIGHT to "MOUSE_MOVE_RIGHT",
     )
 
     // ConsoleExperience's documented layout: face buttons, D-pad and bumpers are 1-0, and the triggers are
@@ -169,19 +176,19 @@ object MpqClient {
         106 to "MOUSE_LEFT_BUTTON", // L3
         107 to "MOUSE_RIGHT_BUTTON", // R3: interact
         110 to "OPEN_NAVIGATION_MENU",
-        -3 to "KEY_W",
-        -4 to "KEY_S",
-        -1 to "KEY_A",
-        -2 to "KEY_D",
-        -7 to "MOUSE_MOVE_UP",
-        -8 to "MOUSE_MOVE_DOWN",
-        -5 to "MOUSE_MOVE_LEFT",
-        -6 to "MOUSE_MOVE_RIGHT",
+        LEFT_STICK_UP to "KEY_W",
+        LEFT_STICK_DOWN to "KEY_S",
+        LEFT_STICK_LEFT to "KEY_A",
+        LEFT_STICK_RIGHT to "KEY_D",
+        RIGHT_STICK_UP to "MOUSE_MOVE_UP",
+        RIGHT_STICK_DOWN to "MOUSE_MOVE_DOWN",
+        RIGHT_STICK_LEFT to "MOUSE_MOVE_LEFT",
+        RIGHT_STICK_RIGHT to "MOUSE_MOVE_RIGHT",
     )
 
     // OctoPad reads every button as its own key and works out layers, modifiers and menus itself, the way
-    // WoW Forever's gamepad mode does. The sticks drive the app's gamepad camera: the left stick moves
-    // (steering the camera so movement is camera-relative), the right stick looks around or points.
+    // WoW Forever's gamepad mode does. The left stick only moves (forward/back and strafe); the right stick
+    // is the camera, turning the character with it, or the pointer while a menu is open.
     private val OCTOPAD_BINDINGS = listOf<Pair<Int, Any>>(
         96 to "KEY_F1", // A
         97 to "KEY_F2", // B
@@ -200,15 +207,26 @@ object MpqClient {
         108 to "KEY_KP_SUBTRACT", // Start: radial menu
         109 to "POINTER_MODE", // Select: pointer, like the touchpad
         110 to "OPEN_NAVIGATION_MENU",
-        -3 to listOf("CAMERA_STEER", "KEY_W"),
-        -4 to listOf("CAMERA_STEER", "KEY_S"),
-        -1 to listOf("CAMERA_STEER", "KEY_A"),
-        -2 to listOf("CAMERA_STEER", "KEY_D"),
-        -7 to "CAMERA_LOOK_UP",
-        -8 to "CAMERA_LOOK_DOWN",
-        -5 to "CAMERA_LOOK_LEFT",
-        -6 to "CAMERA_LOOK_RIGHT",
+        LEFT_STICK_UP to "KEY_W",
+        LEFT_STICK_DOWN to "KEY_S",
+        LEFT_STICK_LEFT to "KEY_Q",
+        LEFT_STICK_RIGHT to "KEY_E",
+        RIGHT_STICK_UP to "CAMERA_LOOK_UP",
+        RIGHT_STICK_DOWN to "CAMERA_LOOK_DOWN",
+        RIGHT_STICK_LEFT to "CAMERA_LOOK_LEFT",
+        RIGHT_STICK_RIGHT to "CAMERA_LOOK_RIGHT",
     )
+
+    // Stick directions as ExternalControllerBinding reports them. Android's Y axes grow downwards, so the
+    // "negative" codes are the stick pushed down.
+    private const val LEFT_STICK_LEFT = -1
+    private const val LEFT_STICK_RIGHT = -2
+    private const val LEFT_STICK_DOWN = -3
+    private const val LEFT_STICK_UP = -4
+    private const val RIGHT_STICK_LEFT = -5
+    private const val RIGHT_STICK_RIGHT = -6
+    private const val RIGHT_STICK_DOWN = -7
+    private const val RIGHT_STICK_UP = -8
 
     // id, name and cursorSpeed must come first: InputControlsManager reads them with a streaming parser.
     private fun controllerProfile(layout: ControllerLayout) = JSONObject().apply {
