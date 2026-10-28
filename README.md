@@ -113,6 +113,10 @@ The `_classic_beta_/` folder can be deleted afterwards.
 
 ---
 
+### Add-ons (WoW Forever and Retail)
+
+**Add-ons** on the main screen lists popular add-ons that publish GitHub releases with the BigWigs packager's `release.json` (Questie, RestedXP, Guidelime, DBM, BigWigs, Plater, Bartender4, Dominos, MoveAny and more). Only those with a zip built for your game are shown (flavor `forever`, or `mainline` for Retail). Install, update and remove put them in `_forever_/Interface/AddOns` (or `_retail_`). *Add from GitHub* takes any other `owner/repository` that publishes the same way.
+
 ## Building from source
 
 Requirements: JDK 17 and the Android SDK (with build-tools and platform-tools).

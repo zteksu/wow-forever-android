@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import app.gamenative.BuildConfig
 import app.gamenative.ui.theme.WowBronze
 import app.gamenative.ui.theme.WowError
 import app.gamenative.ui.theme.WowGold
@@ -62,7 +63,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
-/** Browse, install, update and remove addons from OctoWoW's catalog, and pick the controller addon. */
+/**
+ * Browse, install, update and remove addons: OctoWoW's catalog (where the controller addon is also picked),
+ * or for Blizzard's clients GitHub releases built for this game, plus any repository the player adds.
+ */
 @Composable
 fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -74,6 +78,7 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
     var busy by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
     var layout by remember { mutableStateOf(MpqClient.controllerLayout(context)) }
+    var repoInput by remember { mutableStateOf("") }
     // Bumped after every change so item states are read again from disk.
     var revision by remember { mutableIntStateOf(0) }
 
@@ -81,11 +86,11 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
         loadError = null
         catalog = null
         scope.launch {
-            runCatching { withContext(Dispatchers.IO) { AddonManager.fetchCatalog() } }
+            runCatching { withContext(Dispatchers.IO) { AddonManager.fetchCatalog(context) } }
                 .onSuccess { catalog = it }
                 .onFailure {
                     Timber.w(it, "Addon catalog failed to load")
-                    loadError = "Couldn't load the OctoWoW addon list: ${it.message}"
+                    loadError = "Couldn't load the ${BuildConfig.GAME_NAME} add-on list: ${it.message}"
                 }
         }
     }
@@ -123,6 +128,7 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
                 }
             }
 
+            if (BuildConfig.MPQ_CLIENT) {
             Text("Controller layout", color = WowMuted, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -154,6 +160,35 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
                 color = WowSubtle,
                 fontSize = 11.sp,
             )
+            } else {
+                Text(
+                    "Popular add-ons with a ${BuildConfig.GAME_EDITION} build on GitHub, installed into ${BuildConfig.FLAVOR_DIR}/Interface/AddOns.",
+                    color = WowSubtle,
+                    fontSize = 11.sp,
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = repoInput,
+                        onValueChange = { repoInput = it },
+                        singleLine = true,
+                        placeholder = { Text("Add from GitHub: owner/repository") },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    ActionButton("Add", busy == null && repoInput.isNotBlank()) {
+                        val input = repoInput
+                        run("Adding $input") {
+                            val addon = AddonManager.addCustomRepo(context, input)
+                            withContext(Dispatchers.Main) {
+                                catalog = (catalog.orEmpty().filterNot { it.name == addon.name }) + addon
+                                repoInput = ""
+                                query = addon.title
+                            }
+                        }
+                    }
+                }
+            }
 
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

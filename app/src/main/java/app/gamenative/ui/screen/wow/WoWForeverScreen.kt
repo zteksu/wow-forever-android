@@ -645,8 +645,10 @@ fun WoWForeverScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (BuildConfig.MPQ_CLIENT && !filesMissing) {
+                        if (!filesMissing) {
                             LinkButton("Add-ons", Icons.Default.Extension) { showAddonsDialog = true }
+                        }
+                        if (BuildConfig.MPQ_CLIENT && !filesMissing) {
                             LinkButton("Verify Game Files", Icons.Default.FactCheck) {
                                 if (!isUpdating && !isLaunching) performUpdate(verifyAll = true)
                             }

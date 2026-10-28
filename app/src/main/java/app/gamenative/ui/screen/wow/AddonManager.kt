@@ -1,10 +1,14 @@
 package app.gamenative.ui.screen.wow
 
 import android.content.Context
+import app.gamenative.BuildConfig
 import app.gamenative.utils.Net
 import java.io.File
 import java.io.IOException
 import java.net.URI
+import java.net.URLEncoder
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 import okhttp3.Request
 import org.json.JSONArray
@@ -12,14 +16,18 @@ import org.json.JSONObject
 import timber.log.Timber
 
 /**
- * Installs 1.12 addons for the MPQ client from OctoWoW's own addon catalog, the list its launcher offers.
- * Each addon is a git repository; the app downloads the branch as a zip from the host's archive endpoint
- * rather than cloning.
+ * Installs addons into the client's Interface/AddOns.
+ *
+ * OctoWoW (the MPQ client) uses its own catalog, the list its launcher offers: each addon is a git
+ * repository downloaded as a branch zip. Blizzard's clients use GitHub releases built by the BigWigs
+ * packager, whose release.json says which zip is for which game flavor (Forever is "forever"), from a
+ * curated list of popular addons plus any repository the player adds.
  */
 object AddonManager {
     private const val CATALOG_URL = "https://octowow.st/api/addons.json"
     private const val PREFS = "octo_addons"
-    private const val ADDONS_DIR = "Interface/AddOns"
+    private const val SOURCES_PREFS = "addon_sources"
+    private const val KEY_CUSTOM_REPOS = "custom_repos"
     private const val DISABLED_DIR = "Interface/AddOns-disabled"
 
     data class Addon(
@@ -33,6 +41,9 @@ object AddonManager {
         val dependencies: List<String>,
         val lastUpdated: String,
         val stars: Int,
+        /** GitHub owner/repo and the release zip for this client, for release-packaged addons. */
+        val repo: String = "",
+        val releaseFile: String = "",
     )
 
     enum class State { NOT_INSTALLED, INSTALLED, UPDATE_AVAILABLE, INSTALLED_BY_PLAYER }
@@ -54,7 +65,11 @@ object AddonManager {
 
     // ---- Catalog ----
 
-    fun fetchCatalog(): List<Addon> {
+    /** The catalog for this client: OctoWoW's list, or GitHub releases built for this game flavor. */
+    fun fetchCatalog(context: Context): List<Addon> =
+        if (BuildConfig.MPQ_CLIENT) fetchOctoCatalog() else fetchReleaseCatalog(context)
+
+    fun fetchOctoCatalog(): List<Addon> {
         val body = Net.http.newCall(Request.Builder().url(CATALOG_URL).build()).execute().use { response ->
             if (!response.isSuccessful) throw IOException("HTTP ${response.code} from the OctoWoW addon list")
             response.body?.string() ?: throw IOException("Empty OctoWoW addon list")
@@ -103,6 +118,140 @@ object AddonManager {
         }
     }
 
+    // ---- GitHub releases ----
+
+    private data class ReleaseSource(val repo: String, val title: String, val notes: String)
+
+    // Popular addons whose GitHub releases carry a release.json; the ones without a zip for this client's
+    // flavor are left out when the list loads.
+    private val RELEASE_SOURCES = listOf(
+        ReleaseSource("Questie/Questie", "Questie", "Shows quests, objectives and quest givers on the map and minimap."),
+        ReleaseSource("RestedXP/RXPGuides", "RestedXP Guides", "Step-by-step leveling guides with waypoints."),
+        ReleaseSource("max-ri/Guidelime", "Guidelime", "Leveling guide with an in-game step list and arrow."),
+        ReleaseSource("DeadlyBossMods/DeadlyBossMods", "Deadly Boss Mods", "Boss timers and warnings."),
+        ReleaseSource("BigWigsMods/BigWigs", "BigWigs", "Lightweight boss timers and warnings."),
+        ReleaseSource("BigWigsMods/LittleWigs", "LittleWigs", "BigWigs modules for dungeons."),
+        ReleaseSource("Tercioo/Plater-Nameplates", "Plater Nameplates", "Customisable nameplates with threat colours and scripts."),
+        ReleaseSource("Bodify/BetterBlizzPlates", "BetterBlizzPlates", "Improves the default nameplates."),
+        ReleaseSource("Bodify/BetterBlizzFrames", "BetterBlizzFrames", "Improves the default unit frames."),
+        ReleaseSource("Nevcairiel/Bartender4", "Bartender4", "Movable, configurable action bars."),
+        ReleaseSource("tullamods/Dominos", "Dominos", "Action bar replacement."),
+        ReleaseSource("tullamods/tullaRange", "tullaRange", "Colours action buttons red when out of range."),
+        ReleaseSource("tullamods/OmniCC", "OmniCC", "Cooldown numbers on everything."),
+        ReleaseSource("Nevcairiel/Mapster", "Mapster", "World map tweaks: scale, opacity, coordinates."),
+        ReleaseSource("d4kir92/MoveAny", "MoveAny", "Move and scale any frame of the interface."),
+        ReleaseSource("syndenbock/MinimapButtonButton", "MinimapButtonButton", "Gathers minimap buttons into one."),
+        ReleaseSource("Stanzilla/AdvancedInterfaceOptions", "Advanced Interface Options", "Settings the options menu hides."),
+        ReleaseSource("BigWigsMods/Capping", "Capping", "Battleground timers and objectives."),
+        ReleaseSource("funkydude/BugSack", "BugSack", "Catches Lua errors in a list instead of popups."),
+        ReleaseSource("funkydude/BadBoy", "BadBoy", "Blocks gold-seller spam in chat."),
+        ReleaseSource("simulationcraft/simc-addon", "SimulationCraft", "Exports your character to SimulationCraft."),
+        ReleaseSource("Hekili/hekili", "Hekili", "Priority helper that shows your next ability."),
+    )
+
+    /** The packager's flavor name for this client. */
+    fun clientFlavor(): String = if (BuildConfig.TARGET_PRODUCT == "wow") "mainline" else "forever"
+
+    private fun releaseUrl(repo: String, file: String): String {
+        val encoded = URLEncoder.encode(file, "UTF-8").replace("+", "%20")
+        return "https://github.com/$repo/releases/latest/download/$encoded"
+    }
+
+    /**
+     * The zip in a release.json for [flavor]. Several zips may include it; the one built for the fewest
+     * flavors is the one made for this client.
+     */
+    internal fun pickReleaseFile(json: String, flavor: String): String? {
+        val releases = JSONObject(json).optJSONArray("releases") ?: return null
+        return (0 until releases.length())
+            .mapNotNull { releases.optJSONObject(it) }
+            .mapNotNull { release ->
+                val metadata = release.optJSONArray("metadata") ?: return@mapNotNull null
+                val flavors = (0 until metadata.length()).mapNotNull { metadata.optJSONObject(it)?.optString("flavor") }.toSet()
+                val name = release.optString("filename")
+                if (flavor in flavors && name.endsWith(".zip") && !release.optBoolean("nolib")) name to flavors.size else null
+            }
+            .minByOrNull { it.second }
+            ?.first
+    }
+
+    /** "Questie-v12.3.1+v1.0.9.zip" -> "v12.3.1+v1.0.9". */
+    internal fun versionOf(file: String): String {
+        val base = file.removeSuffix(".zip")
+        val dash = base.indexOf('-')
+        return if (dash in 1 until base.length - 1) base.substring(dash + 1) else base
+    }
+
+    /** "owner/repo" from that or a github.com URL. */
+    internal fun parseRepo(input: String): String? {
+        val trimmed = input.trim().removeSuffix("/").removeSuffix(".git")
+        val path = if (trimmed.contains("github.com/")) trimmed.substringAfter("github.com/") else trimmed
+        val parts = path.split('/')
+        if (parts.size < 2) return null
+        val repo = "${parts[0]}/${parts[1]}"
+        return repo.takeIf { Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+").matches(it) }
+    }
+
+    private fun fetchRelease(source: ReleaseSource): Addon? {
+        val json = Net.http.newCall(Request.Builder().url(releaseUrl(source.repo, "release.json")).build()).execute().use { response ->
+            if (!response.isSuccessful) return null
+            response.body?.string() ?: return null
+        }
+        val file = pickReleaseFile(json, clientFlavor()) ?: return null
+        val repoName = source.repo.substringAfter('/')
+        return Addon(
+            name = repoName,
+            title = source.title,
+            notes = source.notes,
+            author = source.repo.substringBefore('/'),
+            version = versionOf(file),
+            git = "https://github.com/${source.repo}",
+            branch = "",
+            dependencies = emptyList(),
+            lastUpdated = file,
+            stars = 0,
+            repo = source.repo,
+            releaseFile = file,
+        )
+    }
+
+    private fun customRepos(context: Context): List<String> =
+        context.getSharedPreferences(SOURCES_PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_CUSTOM_REPOS, "")!!
+            .split('\n')
+            .filter { it.isNotBlank() }
+
+    fun fetchReleaseCatalog(context: Context): List<Addon> {
+        val known = RELEASE_SOURCES.map { it.repo.lowercase() }.toSet()
+        val sources = RELEASE_SOURCES + customRepos(context)
+            .filter { it.lowercase() !in known }
+            .map { ReleaseSource(it, it.substringAfter('/'), "Added from GitHub") }
+        val pool = Executors.newFixedThreadPool(6)
+        try {
+            val results = sources.map { source ->
+                pool.submit<Result<Addon?>> { runCatching { fetchRelease(source) } }
+            }.map { it.get(60, TimeUnit.SECONDS) }
+            if (results.all { it.isFailure }) throw results.first().exceptionOrNull() ?: IOException("No addons loaded")
+            return results.mapNotNull { it.getOrNull() }
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    /**
+     * Adds any GitHub repository whose releases carry a release.json with a zip for this client, and
+     * returns it as a catalog entry.
+     */
+    fun addCustomRepo(context: Context, input: String): Addon {
+        val repo = parseRepo(input) ?: throw IOException("Enter it as owner/repository, like Questie/Questie")
+        val addon = fetchRelease(ReleaseSource(repo, repo.substringAfter('/'), "Added from GitHub"))
+            ?: throw IOException("$repo has no release built for this game (it needs a release.json from the BigWigs packager)")
+        val prefs = context.getSharedPreferences(SOURCES_PREFS, Context.MODE_PRIVATE)
+        val repos = (customRepos(context) + repo).distinctBy { it.lowercase() }
+        prefs.edit().putString(KEY_CUSTOM_REPOS, repos.joinToString("\n")).apply()
+        return addon
+    }
+
     // ---- State ----
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -128,13 +277,14 @@ object AddonManager {
         editor.apply()
     }
 
-    private fun addonsDir(gameRoot: File) = File(gameRoot, ADDONS_DIR)
+    private fun addonsDir(gameRoot: File) =
+        File(if (BuildConfig.FLAVOR_DIR.isEmpty()) gameRoot else File(gameRoot, BuildConfig.FLAVOR_DIR), "Interface/AddOns")
 
     fun state(context: Context, gameRoot: File, addon: Addon): State {
         val record = record(context, addon.name)
         val installed = record?.folders?.any { File(addonsDir(gameRoot), it).isDirectory } == true
         return when {
-            installed && addon.lastUpdated.isNotBlank() && addon.lastUpdated > record!!.lastUpdated -> State.UPDATE_AVAILABLE
+            installed && addon.lastUpdated.isNotBlank() && addon.lastUpdated != record!!.lastUpdated -> State.UPDATE_AVAILABLE
             installed -> State.INSTALLED
             File(addonsDir(gameRoot), addon.name).isDirectory -> State.INSTALLED_BY_PLAYER
             else -> State.NOT_INSTALLED
@@ -153,7 +303,11 @@ object AddonManager {
     }
 
     private fun installOne(context: Context, gameRoot: File, addon: Addon, onStatus: (String) -> Unit) {
-        val url = archiveUrl(addon.git, addon.branch) ?: throw IOException("Unsupported addon host for ${addon.name}")
+        val url = if (addon.releaseFile.isNotEmpty()) {
+            releaseUrl(addon.repo, addon.releaseFile)
+        } else {
+            archiveUrl(addon.git, addon.branch) ?: throw IOException("Unsupported addon host for ${addon.name}")
+        }
         onStatus("Downloading ${addon.title}...")
         val zip = File(context.cacheDir, "addon-${addon.name}.zip")
         try {
@@ -182,6 +336,17 @@ object AddonManager {
      * folder that holds a .toc of the same name, so folders are named after their .toc: one addon at the
      * archive root, or one per subfolder for repositories that bundle several.
      */
+    /** "MoveAny_Vanilla.toc" -> "MoveAny": the addon a (possibly per-game-version) .toc belongs to. */
+    internal fun tocBase(file: String): String {
+        val base = file.removeSuffix(".toc").removeSuffix(".TOC")
+        return base.replace(TOC_FLAVOR_SUFFIX, "")
+    }
+
+    private val TOC_FLAVOR_SUFFIX = Regex(
+        "[-_](Vanilla|Classic|TBC|BCC|Wrath|WOTLKC|Cata|Mists|Mainline|Forever|Titan|Camelot|Standard)$",
+        RegexOption.IGNORE_CASE,
+    )
+
     internal fun extractAddon(zipFile: File, addonsDir: File, preferredName: String): List<String> {
         ZipFile(zipFile).use { zip ->
             val entries = zip.entries().toList().filterNot { it.name.contains("..") || it.name.startsWith("/") }
@@ -189,16 +354,20 @@ object AddonManager {
                 ?.takeIf { p -> p != "/" && entries.all { it.name.startsWith(p) } } ?: ""
             val tocs = entries.map { it.name.removePrefix(prefix) }.filter { it.endsWith(".toc", ignoreCase = true) }
 
-            val rootTocs = tocs.filter { '/' !in it }.map { it.removeSuffix(".toc").removeSuffix(".TOC") }
+            val rootTocs = tocs.filter { '/' !in it }.map(::tocBase)
+            val topFolder = prefix.removeSuffix("/")
             val roots: Map<String, String> = if (rootTocs.isNotEmpty()) {
-                // Several root .toc files (e.g. per game version) still make one addon; prefer the catalog name.
-                val folder = rootTocs.firstOrNull { it.equals(preferredName, true) } ?: rootTocs.sorted().first()
+                // Several root .toc files (one per game version) still make one addon. A release zip's own
+                // folder is the addon's name; a git branch zip's ("repo-main") isn't, so then the catalog name.
+                val folder = rootTocs.firstOrNull { it.equals(topFolder, true) }?.let { topFolder }
+                    ?: rootTocs.firstOrNull { it.equals(preferredName, true) }
+                    ?: rootTocs.minByOrNull { it.length }!!
                 mapOf("" to folder)
             } else {
                 tocs.filter { it.count { c -> c == '/' } == 1 }
-                    .map { it.substringBefore('/') to it.substringAfter('/').removeSuffix(".toc").removeSuffix(".TOC") }
+                    .map { it.substringBefore('/') to tocBase(it.substringAfter('/')) }
                     .filter { (dir, toc) -> dir.equals(toc, ignoreCase = true) }
-                    .associate { (dir, toc) -> "$dir/" to toc }
+                    .associate { (dir, _) -> "$dir/" to dir }
             }
             if (roots.isEmpty()) throw IOException("No addon (.toc file) found in the download")
 
