@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +60,7 @@ import app.gamenative.ui.theme.WowMuted
 import app.gamenative.ui.theme.WowSubtle
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -79,6 +81,10 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
     var status by remember { mutableStateOf<String?>(null) }
     var layout by remember { mutableStateOf(MpqClient.controllerLayout(context)) }
     var repoInput by remember { mutableStateOf("") }
+    var curseKey by remember { mutableStateOf(CurseForge.apiKey(context)) }
+    var curseKeyInput by remember { mutableStateOf("") }
+    var curseResults by remember { mutableStateOf<List<AddonManager.Addon>>(emptyList()) }
+    var curseError by remember { mutableStateOf<String?>(null) }
     // Bumped after every change so item states are read again from disk.
     var revision by remember { mutableIntStateOf(0) }
 
@@ -95,6 +101,24 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
         }
     }
     LaunchedEffect(Unit) { load() }
+
+    // CurseForge: the most popular addons for this client, or a search as the player types.
+    LaunchedEffect(query, curseKey) {
+        if (BuildConfig.MPQ_CLIENT || curseKey == null) {
+            curseResults = emptyList()
+            return@LaunchedEffect
+        }
+        if (query.isNotBlank()) delay(500)
+        runCatching { withContext(Dispatchers.IO) { CurseForge.search(context, query) } }
+            .onSuccess {
+                curseResults = it
+                curseError = null
+            }
+            .onFailure {
+                Timber.w(it, "CurseForge search failed")
+                curseError = "CurseForge: ${it.message}"
+            }
+    }
 
     fun run(label: String, action: suspend ((String) -> Unit) -> Unit) {
         if (busy != null) return
@@ -188,6 +212,45 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
                         }
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                if (curseKey == null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = curseKeyInput,
+                            onValueChange = { curseKeyInput = it },
+                            singleLine = true,
+                            placeholder = { Text("CurseForge API key (console.curseforge.com)") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        ActionButton("Connect", busy == null && curseKeyInput.isNotBlank()) {
+                            val key = curseKeyInput.trim()
+                            run("Checking the CurseForge key") {
+                                CurseForge.verify(key)
+                                CurseForge.setApiKey(context, key)
+                                withContext(Dispatchers.Main) {
+                                    curseKeyInput = ""
+                                    curseKey = key
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            curseError ?: "CurseForge connected: search to find any ${BuildConfig.GAME_EDITION} add-on.",
+                            color = if (curseError != null) WowError else Color(0xFF48BB78),
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = {
+                            CurseForge.setApiKey(context, null)
+                            curseKey = null
+                            curseError = null
+                        }) { Text("Remove key", fontSize = 12.sp) }
+                    }
+                }
             }
 
             Spacer(Modifier.height(10.dp))
@@ -221,11 +284,19 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
                 }
                 else -> {
                     revision // read so the list recomposes after installs
-                    val shown = list
-                        .filter { query.isBlank() || it.title.contains(query, true) || it.name.contains(query, true) || it.notes.contains(query, true) }
+                    val local = list.filter {
+                        query.isBlank() || it.title.contains(query, true) || it.name.contains(query, true) || it.notes.contains(query, true)
+                    }
+                    // CurseForge already searched for the query.
+                    val shown = AddonManager.merge(local, curseResults)
                         .map { it to AddonManager.state(context, gameRoot, it) }
                         .filter { !installedOnly || it.second != AddonManager.State.NOT_INSTALLED }
-                        .sortedWith(compareByDescending<Pair<AddonManager.Addon, AddonManager.State>> { it.first.stars }.thenBy { it.first.title.lowercase() })
+                        .sortedWith(
+                            compareBy<Pair<AddonManager.Addon, AddonManager.State>> { if (it.first.curseModId != 0) 1 else 0 }
+                                .thenByDescending { it.first.stars }
+                                .thenByDescending { it.first.downloads }
+                                .thenBy { it.first.title.lowercase() },
+                        )
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(shown, key = { it.first.name }) { (addon, state) ->
                             AddonRow(
@@ -270,6 +341,8 @@ private fun AddonRow(
                     Text(addon.notes, color = WowMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 val meta = listOfNotNull(
+                    addon.source.takeIf { it.isNotBlank() },
+                    addon.downloads.takeIf { it > 0 }?.let { downloadsText(it) },
                     addon.author.takeIf { it.isNotBlank() }?.let { "by $it" },
                     addon.version.takeIf { it.isNotBlank() }?.let { "v$it" },
                     addon.dependencies.takeIf { it.isNotEmpty() }?.let { "needs ${it.joinToString()}" },
@@ -290,6 +363,12 @@ private fun AddonRow(
             }
         }
     }
+}
+
+private fun downloadsText(count: Long) = when {
+    count >= 1_000_000 -> "%.1fM downloads".format(count / 1_000_000.0)
+    count >= 1_000 -> "%.0fk downloads".format(count / 1_000.0)
+    else -> "$count downloads"
 }
 
 @Composable

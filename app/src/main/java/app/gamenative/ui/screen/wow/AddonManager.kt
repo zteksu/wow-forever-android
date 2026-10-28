@@ -44,7 +44,17 @@ object AddonManager {
         /** GitHub owner/repo and the release zip for this client, for release-packaged addons. */
         val repo: String = "",
         val releaseFile: String = "",
-    )
+        /** CurseForge mod and file ids, for addons from CurseForge. */
+        val curseModId: Int = 0,
+        val curseFileId: Int = 0,
+        val downloads: Long = 0,
+    ) {
+        val source get() = when {
+            curseModId != 0 -> "CurseForge"
+            repo.isNotEmpty() -> "GitHub"
+            else -> ""
+        }
+    }
 
     enum class State { NOT_INSTALLED, INSTALLED, UPDATE_AVAILABLE, INSTALLED_BY_PLAYER }
 
@@ -68,6 +78,12 @@ object AddonManager {
     /** The catalog for this client: OctoWoW's list, or GitHub releases built for this game flavor. */
     fun fetchCatalog(context: Context): List<Addon> =
         if (BuildConfig.MPQ_CLIENT) fetchOctoCatalog() else fetchReleaseCatalog(context)
+
+    /** GitHub releases first; CurseForge entries for the same addon are dropped. */
+    fun merge(first: List<Addon>, more: List<Addon>): List<Addon> {
+        val names = first.flatMap { listOf(it.name.lowercase(), it.title.lowercase()) }.toSet()
+        return first + more.filter { it.name.lowercase() !in names && it.title.lowercase() !in names }.distinctBy { it.name }
+    }
 
     fun fetchOctoCatalog(): List<Addon> {
         val body = Net.http.newCall(Request.Builder().url(CATALOG_URL).build()).execute().use { response ->
@@ -295,15 +311,20 @@ object AddonManager {
 
     /** Installs [addon] and any catalog addons it requires that aren't installed yet. */
     fun install(context: Context, gameRoot: File, addon: Addon, catalog: List<Addon>, onStatus: (String) -> Unit) {
-        val missing = addon.dependencies
-            .mapNotNull { dep -> catalog.firstOrNull { it.name.equals(dep, ignoreCase = true) } }
-            .filter { state(context, gameRoot, it) == State.NOT_INSTALLED }
+        val required = if (addon.curseModId != 0) {
+            CurseForge.requiredDependencies(context, addon)
+        } else {
+            addon.dependencies.mapNotNull { dep -> catalog.firstOrNull { it.name.equals(dep, ignoreCase = true) } }
+        }
+        val missing = required.filter { state(context, gameRoot, it) == State.NOT_INSTALLED }
         for (dependency in missing) installOne(context, gameRoot, dependency, onStatus)
         installOne(context, gameRoot, addon, onStatus)
     }
 
     private fun installOne(context: Context, gameRoot: File, addon: Addon, onStatus: (String) -> Unit) {
-        val url = if (addon.releaseFile.isNotEmpty()) {
+        val url = if (addon.curseModId != 0) {
+            CurseForge.downloadUrl(context, addon)
+        } else if (addon.releaseFile.isNotEmpty()) {
             releaseUrl(addon.repo, addon.releaseFile)
         } else {
             archiveUrl(addon.git, addon.branch) ?: throw IOException("Unsupported addon host for ${addon.name}")

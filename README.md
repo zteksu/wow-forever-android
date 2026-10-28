@@ -117,6 +117,8 @@ The `_classic_beta_/` folder can be deleted afterwards.
 
 **Add-ons** on the main screen lists popular add-ons that publish GitHub releases with the BigWigs packager's `release.json` (Questie, RestedXP, Guidelime, DBM, BigWigs, Plater, Bartender4, Dominos, MoveAny and more). Only those with a zip built for your game are shown (flavor `forever`, or `mainline` for Retail). Install, update and remove put them in `_forever_/Interface/AddOns` (or `_retail_`). *Add from GitHub* takes any other `owner/repository` that publishes the same way.
 
+**CurseForge:** paste your own API key from [CurseForge for Studios](https://console.curseforge.com) (API keys) into the Add-ons screen. The list then also shows CurseForge's most popular add-ons for your game, and the search box searches all of them; installs pull in required dependencies. The key stays on the device and is only sent to `api.curseforge.com`. Some authors turn off downloads through apps; those show their CurseForge page instead.
+
 ## Building from source
 
 Requirements: JDK 17 and the Android SDK (with build-tools and platform-tools).
