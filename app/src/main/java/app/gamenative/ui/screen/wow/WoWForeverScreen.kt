@@ -951,7 +951,7 @@ private const val DEFAULT_DRIVER = "Turnip-WoW-scheduler-test"
 private const val ADRENO_8XX_DRIVER = "Turnip-V32-RP6sched"
 private const val PROTON_VERSION = "proton-11.0-90624-arm64ec"
 private const val DXVK_VERSION = "2.4.1-wow-aarch64-test"
-private const val X64_DXVK_VERSION = "2.7.1"
+private const val X64_DXVK_VERSION = "2.6.1-gplasync"
 private const val X64_FEXCORE_VERSION = "2605"
 
 private data class GpuProfile(val driver: String, val tuDebug: String, val screenSize: String, val label: String, val edition: String) {
@@ -1077,10 +1077,14 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
         } else if (!BuildConfig.BLIZZARD_CLIENT) {
             // 64-bit x86 game: Proton runs it through FEX's libarm64ecfex.dll (bundled as fexcore-2605 in
             // this flavor's assets), with x86-64 DXVK fetched from GameNative's component server.
+            // FEX's intermediate preset keeps x86 memory ordering (TSO) for Skyrim's worker threads.
             put("emulator", "FEXCore")
             put("fexcoreVersion", X64_FEXCORE_VERSION)
+            put("fexcorePreset", "INTERMEDIATE")
+            // gplasync compiles shaders in the background instead of stalling a frame for each one, and
+            // the 60 FPS cap keeps Skyrim's physics, which break above 60, sane on a 120 Hz screen.
             put("dxwrapper", "dxvk")
-            put("dxwrapperConfig", "version=$X64_DXVK_VERSION,framerate=0,maxDeviceMemory=0")
+            put("dxwrapperConfig", "version=$X64_DXVK_VERSION,framerate=60,maxDeviceMemory=0,async=1,asyncCache=1")
             put("executablePath", "G:\\$EXE_NAME")
             put("execArgs", "")
         } else {

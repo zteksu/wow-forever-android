@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Draws a game flavor's launcher icon set into app/src/<flavor>/res.
 
-Usage: make_flavor_icon.py [retail|octo|skyrim] [font.ttf]
+Usage: make_flavor_icon.py [retail|octo|skyrim] [font.ttf] [--emblem image.png]
 
 Original artwork (no Blizzard or Bethesda assets): a gold-rimmed medallion with a
 monogram ("WoW", "SE") and a ribbon naming the flavor, in the same dark/gold palette
 as the Forever icon.
 Needs Pillow. Pass a bold serif .ttf to use a different font.
+
+--emblem draws the icon from your own image instead: its dark shapes become a silver
+emblem on the dark background. Use it for personal builds with a logo you own a copy of
+(e.g. from your game folder); don't commit the generated icons when the logo isn't yours
+to publish.
 """
 import math
 import sys
@@ -15,8 +20,14 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 REPO = Path(__file__).resolve().parent.parent
-FLAVOR = sys.argv[1] if len(sys.argv) > 1 else "retail"
-FONT = sys.argv[2] if len(sys.argv) > 2 else "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
+ARGS = sys.argv[1:]
+EMBLEM = None
+if "--emblem" in ARGS:
+    i = ARGS.index("--emblem")
+    EMBLEM = Path(ARGS[i + 1])
+    del ARGS[i:i + 2]
+FLAVOR = ARGS[0] if len(ARGS) > 0 else "retail"
+FONT = ARGS[1] if len(ARGS) > 1 else "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
 RES = REPO / f"app/src/{FLAVOR}/res"
 
 # Monogram, ribbon text and the medallion face colour, from centre (t=0) to rim (t=1).
@@ -153,6 +164,41 @@ def emblem():
     return img
 
 
+def emblem_from_image(path):
+    """The image's dark shapes as a silver emblem, scaled into the adaptive icon's safe zone."""
+    src = Image.open(path).convert("L")
+    # Darkest pixels are the logo, mid greys its shading, light ones the background.
+    shape = src.point(lambda v: 255 if v < 200 else 0)
+    box = shape.getbbox()
+    if not box:
+        raise SystemExit(f"No dark shapes found in {path}")
+    src, shape = src.crop(box), shape.crop(box)
+    safe = round(S * 62 / 108)  # inside the 66dp circle every launcher mask keeps
+    scale = safe / max(src.size)
+    size = (max(1, round(src.width * scale)), max(1, round(src.height * scale)))
+    # Pixel art stays crisp with nearest-neighbour; photos and drawings get smooth edges.
+    resample = Image.NEAREST if max(Image.open(path).size) <= 512 and len(set(src.getdata())) <= 16 else Image.LANCZOS
+    src, shape = src.resize(size, resample), shape.resize(size, resample)
+    tone = src.point(lambda v: 0 if v < 80 else 1)  # black logo vs grey shading
+    face = Image.new("RGBA", size)
+    px, tx = face.load(), tone.load()
+    for y in range(size[1]):
+        t = y / max(size[1] - 1, 1)
+        silver = (round(232 - 70 * t), round(236 - 66 * t), round(242 - 58 * t))
+        shade = (round(118 - 40 * t), round(126 - 40 * t), round(138 - 40 * t))
+        for x in range(size[0]):
+            px[x, y] = (shade if tx[x, y] else silver) + (255,)
+    face.putalpha(shape)
+
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    pos = ((S - size[0]) // 2, (S - size[1]) // 2)
+    layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    layer.paste(face, pos, face)
+    shadow(img, layer.getchannel("A"), offset=10, blur=16)
+    img.alpha_composite(layer)
+    return img
+
+
 def save(img, path, size):
     path.parent.mkdir(parents=True, exist_ok=True)
     out = img.resize((size, size), Image.LANCZOS)
@@ -163,7 +209,7 @@ def save(img, path, size):
 
 
 def main():
-    fg = emblem()
+    fg = emblem_from_image(EMBLEM) if EMBLEM else emblem()
 
     full = Image.new("RGBA", (S, S), BACKGROUND + (255,))
     full.alpha_composite(fg)
