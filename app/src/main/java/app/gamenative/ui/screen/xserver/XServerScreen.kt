@@ -3619,8 +3619,9 @@ private fun setupXEnvironment(
         if (enableWineDebug && wineDebugChannels.isNotEmpty())
             "+" + wineDebugChannels.replace(",", ",+")
         else if (launchLog)
-            // Which processes start, which DLLs load and any crash, so a silent exit can be traced.
-            "fixme-all,+process,+loaddll,+seh,warn+module"
+            // Which processes start, which DLLs load and any crash, so a silent exit can be traced. Exceptions
+            // are warnings; +seh's traces would log every exception FEX handles, thousands a second.
+            "fixme-all,+process,+loaddll,warn+seh,warn+module"
         else
             "-all",
     )
