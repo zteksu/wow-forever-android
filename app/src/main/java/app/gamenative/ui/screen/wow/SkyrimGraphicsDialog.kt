@@ -45,23 +45,22 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 /**
- * Skyrim's graphics options, set before launching like in the game's own launcher. [documentsDir] is
+ * Skyrim's options, set before launching like in the game's own launcher. [documentsDir] is
  * the prefix's Documents folder, or null before the first launch has created the prefix; settings are
  * then kept in [SkyrimGraphics.pendingFile] until it exists.
  */
 @Composable
-fun SkyrimGraphicsDialog(documentsDir: File?, defaultResolution: String, onDismiss: () -> Unit) {
+fun SkyrimGraphicsDialog(documentsDir: File?, skseInstalled: Boolean, defaultResolution: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var ini by remember { mutableStateOf<String?>(null) }
     var selection by remember { mutableStateOf(emptyMap<String, String>()) }
-    var resolution by remember { mutableStateOf(SkyrimGraphics.resolution(context)) }
-    var frameLimit by remember { mutableStateOf(SkyrimGraphics.frameLimit(context)) }
+    var launch by remember { mutableStateOf(SkyrimGraphics.launch(context)) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         val text = withContext(Dispatchers.IO) {
-            SkyrimGraphics.load(documentsDir, SkyrimGraphics.pendingFile(context), resolution ?: defaultResolution)
+            SkyrimGraphics.load(documentsDir, SkyrimGraphics.pendingFile(context), launch.resolution ?: defaultResolution)
         }
         ini = text
         selection = SkyrimGraphics.read(text)
@@ -76,7 +75,7 @@ fun SkyrimGraphicsDialog(documentsDir: File?, defaultResolution: String, onDismi
                 }.onFailure { Timber.w(it, "Saving Skyrim settings failed") }.isSuccess
             }
             if (saved) {
-                SkyrimGraphics.saveDisplay(context, resolution, frameLimit)
+                SkyrimGraphics.saveLaunch(context, launch)
                 onDismiss()
             } else {
                 error = "Couldn't save SkyrimPrefs.ini"
@@ -84,7 +83,7 @@ fun SkyrimGraphicsDialog(documentsDir: File?, defaultResolution: String, onDismi
         }
     }
 
-    val preset = SkyrimGraphics.presetOf(selection)
+    val preset = SkyrimGraphics.presetLabel(selection, launch, defaultResolution)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -92,7 +91,7 @@ fun SkyrimGraphicsDialog(documentsDir: File?, defaultResolution: String, onDismi
         modifier = Modifier.fillMaxWidth(0.92f),
         title = {
             Column {
-                Text(text = "Graphics", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = WowGold)
+                Text(text = "Options", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = WowGold)
                 Text(
                     text = error ?: "Used the next time the game starts. Lower settings run faster under emulation.",
                     fontSize = 11.sp,
@@ -111,19 +110,41 @@ fun SkyrimGraphicsDialog(documentsDir: File?, defaultResolution: String, onDismi
                     Text("Reading settings...", color = WowMuted, fontSize = 13.sp)
                     return@Column
                 }
+                Heading("Game")
+                OptionRow("Skip intro video", listOf("Off", "On"), if (launch.skipIntro) "On" else "Off") {
+                    launch = launch.copy(skipIntro = it == "On")
+                }
+                if (skseInstalled) {
+                    OptionRow("Start with SKSE", listOf("Off", "On"), if (launch.skse) "On" else "Off") {
+                        launch = launch.copy(skse = it == "On")
+                    }
+                }
+                OptionRow("Performance overlay", SkyrimGraphics.OVERLAYS.keys.toList(), launch.overlay) {
+                    launch = launch.copy(overlay = it)
+                }
+
                 Heading("Preset")
-                OptionRow("Quality", SkyrimGraphics.PRESETS.keys.toList() + listOfNotNull("Custom".takeIf { preset == null }), preset ?: "Custom") {
-                    SkyrimGraphics.PRESETS[it]?.let { choices -> selection = choices }
+                OptionRow(
+                    "Quality",
+                    listOf(SkyrimGraphics.BATTERY_SAVER) + SkyrimGraphics.PRESETS.keys + listOfNotNull("Custom".takeIf { preset == "Custom" }),
+                    preset,
+                ) {
+                    if (it == SkyrimGraphics.BATTERY_SAVER) {
+                        selection = SkyrimGraphics.PRESETS.getValue(SkyrimGraphics.BATTERY_PRESET)
+                        launch = launch.copy(resolution = SkyrimGraphics.BATTERY_RESOLUTION, frameLimit = SkyrimGraphics.BATTERY_FRAME_LIMIT)
+                    } else {
+                        SkyrimGraphics.PRESETS[it]?.let { choices -> selection = choices }
+                    }
                 }
 
                 Heading("Display")
                 OptionRow(
                     "Resolution",
                     SkyrimGraphics.RESOLUTIONS.map { it.substringAfter('x') + "p" },
-                    (resolution ?: defaultResolution).substringAfter('x') + "p",
-                ) { label -> resolution = SkyrimGraphics.RESOLUTIONS.first { it.substringAfter('x') + "p" == label } }
-                OptionRow("Frame limit", SkyrimGraphics.FRAME_LIMITS.map { "$it FPS" }, "$frameLimit FPS") {
-                    frameLimit = it.substringBefore(' ').toInt()
+                    (launch.resolution ?: defaultResolution).substringAfter('x') + "p",
+                ) { label -> launch = launch.copy(resolution = SkyrimGraphics.RESOLUTIONS.first { it.substringAfter('x') + "p" == label }) }
+                OptionRow("Frame limit", SkyrimGraphics.FRAME_LIMITS.map { "$it FPS" }, "${launch.frameLimit} FPS") {
+                    launch = launch.copy(frameLimit = it.substringBefore(' ').toInt())
                 }
 
                 for (section in listOf(SkyrimGraphics.QUALITY, SkyrimGraphics.EFFECTS, SkyrimGraphics.DISTANCE)) {
@@ -150,8 +171,7 @@ fun SkyrimGraphicsDialog(documentsDir: File?, defaultResolution: String, onDismi
             TextButton(
                 onClick = {
                     selection = SkyrimGraphics.PRESETS.getValue(SkyrimGraphics.DEFAULT_PRESET)
-                    resolution = null
-                    frameLimit = SkyrimGraphics.DEFAULT_FRAME_LIMIT
+                    launch = launch.copy(resolution = null, frameLimit = SkyrimGraphics.DEFAULT_FRAME_LIMIT)
                 },
                 enabled = ini != null,
             ) {

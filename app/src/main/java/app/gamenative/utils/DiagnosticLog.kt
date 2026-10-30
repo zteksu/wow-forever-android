@@ -15,6 +15,8 @@ import androidx.core.content.FileProvider
 import app.gamenative.BuildConfig
 import app.gamenative.CrashHandler
 import app.gamenative.ui.screen.wow.GamePath
+import app.gamenative.ui.screen.wow.SkyrimConfig
+import app.gamenative.ui.screen.wow.prefixDocuments
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -137,13 +139,18 @@ object DiagnosticLog {
     /** The client's own logs from its folder: the DXVK log and the newest Logs/ and Errors/ files. */
     private fun StringBuilder.appendGameFolderLogs(context: Context) {
         val root = File(GamePath.load(context))
-        val files = listOfNotNull(
+        val skse = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) {
+            emptyList()
+        } else {
+            prefixDocuments(context)?.let { SkyrimConfig.skseLogs(it) }.orEmpty().filter { it.isFile }
+        }
+        val files = skse + listOfNotNull(
             File(root, "WoW_d3d9.log"),
             File(root, "Logs").listFiles()?.filter { it.isFile }?.maxByOrNull { it.lastModified() },
             File(root, "Errors").listFiles()?.filter { it.isFile }?.maxByOrNull { it.lastModified() },
         )
         for (file in files) {
-            appendLine("---------- ${file.relativeTo(root)} (${if (file.isFile) fileTime.format(Date(file.lastModified())) else "missing"}) ----------")
+            appendLine("---------- ${if (file.startsWith(root)) file.relativeTo(root) else file.name} (${if (file.isFile) fileTime.format(Date(file.lastModified())) else "missing"}) ----------")
             if (file.isFile) {
                 appendLine(runCatching { file.readLines().takeLast(GAME_FILE_LINES).joinToString("\n") }.getOrElse { "(unreadable: ${it.message})" })
             }

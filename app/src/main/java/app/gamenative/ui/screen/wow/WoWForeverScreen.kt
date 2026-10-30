@@ -46,6 +46,8 @@ import app.gamenative.ui.screen.wow.WowClientDownloader.EXE_NAME
 import app.gamenative.ui.screen.wow.WowClientDownloader.FLAVOR_DIR
 import app.gamenative.ui.screen.wow.WowClientDownloader.TARGET_PRODUCT
 import app.gamenative.ui.components.GameBackdrop
+import app.gamenative.ui.screen.xserver.FPS_LIMITER_ENABLED_EXTRA
+import app.gamenative.ui.screen.xserver.FPS_LIMITER_TARGET_EXTRA
 import app.gamenative.ui.theme.WowBronze
 import app.gamenative.ui.theme.WowError
 import app.gamenative.ui.theme.WowGold
@@ -219,7 +221,7 @@ fun WoWForeverScreen(
 
         launchJob = scope.launch {
             try {
-                val baseSize = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) gpu.screenSize else SkyrimGraphics.resolution(context) ?: gpu.screenSize
+                val baseSize = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) gpu.screenSize else SkyrimGraphics.launch(context).resolution ?: gpu.screenSize
                 val screenSize = fitScreenSizeToWindow(context, baseSize)
                 val containerId = withContext(Dispatchers.IO) {
                     prepareLaunch(context, File(gamePath), gpu, screenSize) { msg ->
@@ -665,7 +667,7 @@ fun WoWForeverScreen(
                             }
                         }
                         if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
-                            LinkButton("Graphics", Icons.Default.Tune) {
+                            LinkButton("Options", Icons.Default.Tune) {
                                 scope.launch {
                                     graphicsDocuments = withContext(Dispatchers.IO) { prefixDocuments(context) }
                                     showGraphicsDialog = true
@@ -700,6 +702,7 @@ fun WoWForeverScreen(
     if (showGraphicsDialog) {
         SkyrimGraphicsDialog(
             documentsDir = graphicsDocuments,
+            skseInstalled = File(gamePath, SkyrimConfig.SKSE_LOADER).isFile,
             defaultResolution = gpu.screenSize,
             onDismiss = { showGraphicsDialog = false },
         )
@@ -1020,7 +1023,7 @@ internal fun fitScreenSize(baseSize: String, windowWidth: Int, windowHeight: Int
 private const val PREFIX_DOCUMENTS = ".wine/drive_c/users/xuser/Documents"
 
 /** The Wine prefix's Documents folder, or null before the first launch has created the prefix. */
-private fun prefixDocuments(context: Context): File? =
+internal fun prefixDocuments(context: Context): File? =
     ContainerManager(context).getContainerById(CONTAINER_ID)?.let { File(it.rootDir, PREFIX_DOCUMENTS) }?.takeIf { it.isDirectory }
 
 private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, screenSize: String, onStatus: (String) -> Unit): String {
@@ -1059,7 +1062,8 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
 
     onStatus("Configuring ${gpu.label} container...")
     val containerManager = ContainerManager(context)
-    val config = containerConfig(gameRoot, gpu, screenSize, SkyrimGraphics.frameLimit(context))
+    val launch = SkyrimGraphics.launch(context)
+    val config = containerConfig(gameRoot, gpu, screenSize, launch)
     val container = containerManager.getContainerById(CONTAINER_ID)
     if (container == null) {
         onStatus("Creating prefix environment (first boot)...")
@@ -1076,15 +1080,21 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
         containerManager.getContainerById(CONTAINER_ID)?.let {
             val documents = File(it.rootDir, PREFIX_DOCUMENTS)
             SkyrimConfig.ensure(documents, screenSize, SkyrimGraphics.pendingFile(context))
+            runCatching { SkyrimConfig.applyIntro(documents, gameRoot, launch.skipIntro) }.onFailure { e -> Timber.w(e, "Couldn't set the intro video") }
+            // The app's own frame limiter (also in the in-game menu) follows the launcher's frame limit.
+            it.putExtra(FPS_LIMITER_ENABLED_EXTRA, true)
+            it.putExtra(FPS_LIMITER_TARGET_EXTRA, launch.frameLimit)
+            it.saveData()
             runCatching { SkyrimConfig.linkSaves(documents, gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't link Skyrim saves") }
         }
     }
     return CONTAINER_ID
 }
 
-private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String, frameLimit: Int): JSONObject {
+private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String, launch: SkyrimGraphics.Launch): JSONObject {
     val samsungEnv = if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) " FD_DEV_FEATURES=enable_tp_ubwc_flag_hint=1" else ""
-    val envVars = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact,deck_emu MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=0 MESA_VK_WSI_PRESENT_MODE=mailbox TU_DEBUG=${gpu.tuDebug} VKD3D_SHADER_MODEL=6_0 PULSE_LATENCY_MSEC=144$samsungEnv"
+    val hudEnv = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT || launch.hud.isEmpty()) "" else " DXVK_HUD=${launch.hud}"
+    val envVars = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact,deck_emu MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=0 MESA_VK_WSI_PRESENT_MODE=mailbox TU_DEBUG=${gpu.tuDebug} VKD3D_SHADER_MODEL=6_0 PULSE_LATENCY_MSEC=144$samsungEnv$hudEnv"
     return JSONObject().apply {
         put("id", CONTAINER_ID)
         put("name", BuildConfig.GAME_NAME)
@@ -1116,8 +1126,8 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String,
             // gplasync compiles shaders in the background instead of stalling a frame for each one, and
             // the 60 FPS cap keeps Skyrim's physics, which break above 60, sane on a 120 Hz screen.
             put("dxwrapper", "dxvk")
-            put("dxwrapperConfig", "version=$X64_DXVK_VERSION,framerate=$frameLimit,maxDeviceMemory=0,async=1,asyncCache=1")
-            put("executablePath", "G:\\$EXE_NAME")
+            put("dxwrapperConfig", "version=$X64_DXVK_VERSION,framerate=${launch.frameLimit},maxDeviceMemory=0,async=1,asyncCache=1")
+            put("executablePath", "G:\\${SkyrimConfig.launchExe(gameRoot, launch.skse, EXE_NAME)}")
             put("execArgs", "")
         } else {
             put("executablePath", "G:\\$FLAVOR_DIR\\$EXE_NAME")

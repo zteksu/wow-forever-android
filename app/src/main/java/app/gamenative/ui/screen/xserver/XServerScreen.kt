@@ -229,8 +229,8 @@ private const val EXIT_PROCESS_RESPONSE_TIMEOUT_MS = 2_000L
 private const val QUICK_MENU_PROCESS_POLL_INTERVAL_MS = 2_000L
 private const val DEFAULT_FPS_LIMITER_MAX_HZ = 60
 private const val DEFAULT_FPS_LIMITER_TARGET_HZ = 60
-private const val FPS_LIMITER_ENABLED_EXTRA = "fpsLimiterEnabled"
-private const val FPS_LIMITER_TARGET_EXTRA = "fpsLimiterTarget"
+internal const val FPS_LIMITER_ENABLED_EXTRA = "fpsLimiterEnabled"
+internal const val FPS_LIMITER_TARGET_EXTRA = "fpsLimiterTarget"
 
 private fun initialFpsLimiterEnabled(container: Container): Boolean =
     parseBooleanExtra(container.getExtra(FPS_LIMITER_ENABLED_EXTRA)) ?: true
@@ -3692,7 +3692,9 @@ private fun setupXEnvironment(
         guestProgramLauncherComponent.setSteamType(container.getSteamType())
 
         envVars.putAll(container.envVars)
-        envVars.remove("DXVK_FRAME_RATE")
+        // The app's frame limiter replaces DXVK's, except for the x64 games, where DXVK's cap also paces
+        // the game's own frames (the launcher sets both to the same limit).
+        if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) envVars.remove("DXVK_FRAME_RATE")
         envVars.remove("VKD3D_FRAME_RATE")
         if (!envVars.has("WINEESYNC")) envVars.put("WINEESYNC", "1")
 

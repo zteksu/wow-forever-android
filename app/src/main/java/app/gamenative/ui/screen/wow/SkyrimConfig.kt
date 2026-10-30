@@ -20,6 +20,9 @@ object SkyrimConfig {
     internal const val GAME_FOLDER = "Skyrim Special Edition GOG"
     private const val PREFS = "SkyrimPrefs.ini"
     private const val SAVES = "Saves"
+    private const val GAME_INI = "Skyrim.ini"
+    private const val INTRO_VIDEO = "BGS_LOGO.BIK"
+    const val SKSE_LOADER = "skse64_loader.exe"
     internal const val PERFORMANCE_VERSION = 2
 
     /** The handheld defaults: the launcher's Medium preset. */
@@ -60,6 +63,32 @@ object SkyrimConfig {
         if (updated != original) prefs.writeText(updated)
         markTuned(prefs)
     }
+
+    /**
+     * Turns the Bethesda logo video before the main menu off or back on, through Skyrim.ini's
+     * sIntroSequence. The game makes Skyrim.ini from the game folder's Skyrim_Default.ini, so that is
+     * copied first when the game hasn't made one yet.
+     */
+    fun applyIntro(documentsDir: File, gameRoot: File, skip: Boolean) {
+        val ini = File(documentsDir, "My Games/$GAME_FOLDER/$GAME_INI")
+        if (!ini.isFile) {
+            val defaults = File(gameRoot, "Skyrim_Default.ini")
+            if (!skip || !defaults.isFile) return
+            ini.parentFile?.mkdirs()
+            defaults.copyTo(ini)
+        }
+        val original = ini.readText()
+        val updated = setValue(original, "General", "sIntroSequence", if (skip) "" else INTRO_VIDEO)
+        if (updated != original) ini.writeText(updated)
+    }
+
+    /** SKSE's loader when it's installed and wanted, otherwise the game itself. */
+    fun launchExe(gameRoot: File, useSkse: Boolean, gameExe: String): String =
+        if (useSkse && File(gameRoot, SKSE_LOADER).isFile) SKSE_LOADER else gameExe
+
+    /** SKSE's own logs, which it writes next to the settings. */
+    fun skseLogs(documentsDir: File): List<File> =
+        listOf("skse64_loader.log", "skse64.log").map { File(documentsDir, "My Games/$GAME_FOLDER/SKSE/$it") }
 
     /**
      * Makes the prefix's Saves folder a link to `Saves` in [gameRoot], so saves are kept with the game

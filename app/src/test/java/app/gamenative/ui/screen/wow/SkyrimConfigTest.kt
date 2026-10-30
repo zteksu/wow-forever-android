@@ -122,4 +122,31 @@ class SkyrimConfigTest {
         File(saves, "Save3.ess").writeText("new")
         assertTrue(File(game, "Saves/Save3.ess").isFile)
     }
+
+    @Test
+    fun applyIntro_editsSkyrimIniOrStartsItFromTheGameDefaults() {
+        val documents = tempFolder.newFolder("Documents")
+        val game = tempFolder.newFolder("Game")
+        val ini = File(documents, "My Games/Skyrim Special Edition GOG/Skyrim.ini")
+
+        // Nothing to start from yet: left for the game to create.
+        SkyrimConfig.applyIntro(documents, game, skip = true)
+        assertTrue(!ini.exists())
+
+        File(game, "Skyrim_Default.ini").writeText("[General]\r\nsLanguage=ENGLISH\r\n\r\n[Display]\r\nfShadowLODMaxStartFade=1000.0\r\n")
+        SkyrimConfig.applyIntro(documents, game, skip = true)
+        assertEquals("[General]\r\nsLanguage=ENGLISH\r\nsIntroSequence=\r\n\r\n[Display]\r\nfShadowLODMaxStartFade=1000.0\r\n", ini.readText())
+
+        SkyrimConfig.applyIntro(documents, game, skip = false)
+        assertTrue(ini.readText().contains("sIntroSequence=BGS_LOGO.BIK\r\n"))
+    }
+
+    @Test
+    fun launchExe_usesSkseOnlyWhenInstalledAndWanted() {
+        val game = tempFolder.newFolder("Game")
+        assertEquals("SkyrimSE.exe", SkyrimConfig.launchExe(game, true, "SkyrimSE.exe"))
+        File(game, "skse64_loader.exe").writeText("")
+        assertEquals("skse64_loader.exe", SkyrimConfig.launchExe(game, true, "SkyrimSE.exe"))
+        assertEquals("SkyrimSE.exe", SkyrimConfig.launchExe(game, false, "SkyrimSE.exe"))
+    }
 }

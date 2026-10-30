@@ -60,4 +60,13 @@ class SkyrimGraphicsTest {
         assertTrue(SkyrimConfig.isTuned(SkyrimConfig.prefsFile(documents)))
         assertEquals("High", SkyrimGraphics.presetOf(SkyrimGraphics.read(SkyrimGraphics.load(documents, pending, "1280x720"))))
     }
+
+    @Test
+    fun presetLabel_namesBatterySaverOnlyWithItsResolutionAndFrameLimit() {
+        val low = SkyrimGraphics.PRESETS.getValue("Low")
+        val battery = SkyrimGraphics.Launch(resolution = "960x540", frameLimit = 30)
+        assertEquals("Battery saver", SkyrimGraphics.presetLabel(low, battery, "1280x720"))
+        assertEquals("Low", SkyrimGraphics.presetLabel(low, SkyrimGraphics.Launch(), "1280x720"))
+        assertEquals("Custom", SkyrimGraphics.presetLabel(low + ("ao" to "On"), battery, "1280x720"))
+    }
 }

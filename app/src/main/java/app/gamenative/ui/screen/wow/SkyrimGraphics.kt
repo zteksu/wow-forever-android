@@ -1,6 +1,7 @@
 package app.gamenative.ui.screen.wow
 
 import android.content.Context
+import app.gamenative.PrefManager
 import java.io.File
 
 /**
@@ -238,27 +239,71 @@ object SkyrimGraphics {
         pending.delete()
     }
 
-    // App-side display settings.
+    // App-side settings: the emulated display, DXVK and how the game starts.
     private const val PREFS = "skyrim_graphics"
     private const val KEY_RESOLUTION = "resolution"
     private const val KEY_FRAME_LIMIT = "frame_limit"
+    private const val KEY_SKIP_INTRO = "skip_intro"
+    private const val KEY_OVERLAY = "overlay"
+    private const val KEY_SKSE = "skse"
 
     /** 16:9 render sizes; the launch reshapes them to the screen's aspect ratio. */
     val RESOLUTIONS = listOf("960x540", "1280x720", "1600x900", "1920x1080")
     val FRAME_LIMITS = listOf(30, 40, 60)
     const val DEFAULT_FRAME_LIMIT = 60
 
-    fun resolution(context: Context): String? =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_RESOLUTION, null)?.takeIf { it in RESOLUTIONS }
+    /**
+     * Performance overlays: label -> DXVK_HUD value. FPS is the app's own counter (also in the in-game
+     * menu); Detailed is DXVK's, with a frame-time graph and GPU load.
+     */
+    val OVERLAYS = linkedMapOf("Off" to "", "FPS" to "", "Detailed" to "fps,frametimes,gpuload")
 
-    fun frameLimit(context: Context): Int =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_FRAME_LIMIT, DEFAULT_FRAME_LIMIT)
-            .takeIf { it in FRAME_LIMITS } ?: DEFAULT_FRAME_LIMIT
+    /** Low quality at 540p and 30 FPS, for long sessions on battery. */
+    const val BATTERY_SAVER = "Battery saver"
+    const val BATTERY_PRESET = "Low"
+    const val BATTERY_RESOLUTION = "960x540"
+    const val BATTERY_FRAME_LIMIT = 30
 
-    fun saveDisplay(context: Context, resolution: String?, frameLimit: Int) {
+    data class Launch(
+        val resolution: String? = null,
+        val frameLimit: Int = DEFAULT_FRAME_LIMIT,
+        val skipIntro: Boolean = true,
+        val overlay: String = "Off",
+        val skse: Boolean = true,
+    ) {
+        val hud: String get() = OVERLAYS[overlay].orEmpty()
+    }
+
+    fun launch(context: Context): Launch {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return Launch(
+            resolution = prefs.getString(KEY_RESOLUTION, null)?.takeIf { it in RESOLUTIONS },
+            frameLimit = prefs.getInt(KEY_FRAME_LIMIT, DEFAULT_FRAME_LIMIT).takeIf { it in FRAME_LIMITS } ?: DEFAULT_FRAME_LIMIT,
+            skipIntro = prefs.getBoolean(KEY_SKIP_INTRO, true),
+            overlay = when {
+                prefs.getString(KEY_OVERLAY, null) == "Detailed" -> "Detailed"
+                PrefManager.showFps -> "FPS"
+                else -> "Off"
+            },
+            skse = prefs.getBoolean(KEY_SKSE, true),
+        )
+    }
+
+    fun saveLaunch(context: Context, launch: Launch) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .apply { if (resolution == null) remove(KEY_RESOLUTION) else putString(KEY_RESOLUTION, resolution) }
-            .putInt(KEY_FRAME_LIMIT, frameLimit)
+            .apply { if (launch.resolution == null) remove(KEY_RESOLUTION) else putString(KEY_RESOLUTION, launch.resolution) }
+            .putInt(KEY_FRAME_LIMIT, launch.frameLimit)
+            .putBoolean(KEY_SKIP_INTRO, launch.skipIntro)
+            .putString(KEY_OVERLAY, launch.overlay)
+            .putBoolean(KEY_SKSE, launch.skse)
             .apply()
+        PrefManager.showFps = launch.overlay == "FPS"
+    }
+
+    /** The preset row's label: Battery saver when Low runs at its resolution and frame limit. */
+    fun presetLabel(selection: Map<String, String>, launch: Launch, defaultResolution: String): String {
+        val preset = presetOf(selection) ?: return "Custom"
+        val resolution = launch.resolution ?: defaultResolution
+        return if (preset == BATTERY_PRESET && resolution == BATTERY_RESOLUTION && launch.frameLimit == BATTERY_FRAME_LIMIT) BATTERY_SAVER else preset
     }
 }
