@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Draws a game flavor's launcher icon set into app/src/<flavor>/res.
 
-Usage: make_flavor_icon.py [retail|octo] [font.ttf]
+Usage: make_flavor_icon.py [retail|octo|skyrim] [font.ttf]
 
-Original artwork (no Blizzard assets): a gold-rimmed medallion with "WoW" and a
-ribbon naming the flavor, in the same dark/gold palette as the Forever icon.
+Original artwork (no Blizzard or Bethesda assets): a gold-rimmed medallion with a
+monogram ("WoW", "SE") and a ribbon naming the flavor, in the same dark/gold palette
+as the Forever icon.
 Needs Pillow. Pass a bold serif .ttf to use a different font.
 """
 import math
@@ -18,12 +19,13 @@ FLAVOR = sys.argv[1] if len(sys.argv) > 1 else "retail"
 FONT = sys.argv[2] if len(sys.argv) > 2 else "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
 RES = REPO / f"app/src/{FLAVOR}/res"
 
-# Ribbon text and the medallion face colour, from centre (t=0) to rim (t=1).
+# Monogram, ribbon text and the medallion face colour, from centre (t=0) to rim (t=1).
 FLAVORS = {
-    "retail": ("RETAIL", lambda t: (40 - 32 * t, 150 - 115 * t, 215 - 140 * t)),  # sapphire
-    "octo": ("OCTO", lambda t: (34 - 26 * t, 168 - 120 * t, 138 - 96 * t)),  # teal
+    "retail": ("WoW", "RETAIL", lambda t: (40 - 32 * t, 150 - 115 * t, 215 - 140 * t)),  # sapphire
+    "octo": ("WoW", "OCTO", lambda t: (34 - 26 * t, 168 - 120 * t, 138 - 96 * t)),  # teal
+    "skyrim": ("SE", "SKYRIM", lambda t: (120 - 95 * t, 136 - 106 * t, 152 - 112 * t)),  # frost steel
 }
-RIBBON, FACE = FLAVORS[FLAVOR]
+MONOGRAM, RIBBON, FACE = FLAVORS[FLAVOR]
 BACKGROUND = (0x0A, 0x0E, 0x17)
 S = 1024  # working canvas = the full 108dp adaptive-icon foreground
 
@@ -120,9 +122,9 @@ def emblem():
     rd.ellipse([c - 212, c - 212, c + 212, c + 212], outline=255, width=6)
     paint(img, ring, GOLD, (c - 212, c - 212, c + 212, c + 212))
 
-    # "WoW" in gold with a dark outline.
+    # The monogram in gold with a dark outline.
     big = ImageFont.truetype(FONT, 190)
-    wow = text_mask("WoW", big, (c, c - 52), tracking=-6)
+    wow = text_mask(MONOGRAM, big, (c, c - 52), tracking=-6)
     outline = wow.filter(ImageFilter.MaxFilter(13))
     shadow(img, outline, offset=8, blur=8)
     img.paste(Image.new("RGBA", (S, S), (40, 24, 10, 255)), (0, 0), outline)

@@ -3610,9 +3610,9 @@ private fun setupXEnvironment(
     val enableWineDebug = PrefManager.enableWineDebug
     val enableBox86Logs = WinlatorPrefManager.getBoolean("enable_box86_64_logs", false)
     val wineDebugChannels = PrefManager.wineDebugChannels
-    // The x86 MPQ client (OctoWoW) is the least proven path and has no debug settings screen, so it always
-    // writes Wine's errors to Download/, where players can open and share it without a PC.
-    val launchLog = BuildConfig.MPQ_CLIENT
+    // Emulated x86 games (OctoWoW, Skyrim) are the least proven path and have no debug settings screen, so
+    // they always write Wine's errors to Download/, where players can open and share them without a PC.
+    val launchLog = !BuildConfig.BLIZZARD_CLIENT
     // explicitly enable or disable Wine debug channels
     envVars.put(
         "WINEDEBUG",
@@ -3624,7 +3624,7 @@ private fun setupXEnvironment(
         else
             "-all",
     )
-    if (launchLog) {
+    if (BuildConfig.MPQ_CLIENT) {
         // wowbox64, which runs the 32-bit client, logs its own startup and crashes with these.
         envVars.put("BOX64_LOG", "1")
         envVars.put("BOX64_SHOWSEGV", "1")
@@ -3923,10 +3923,9 @@ private fun getWineStartCommand(
         "\"A:\\${normalizedPath}\""
     }
 
-    // ARM64 programs (the WoW clients) start directly. So does the 32-bit MPQ client: winhandler.exe is
-    // x86-64 and needs FEX's libarm64ecfex.dll, which this app doesn't ship, while 32-bit code runs
-    // through the bundled wowbox64.
-    return if (BuildConfig.MPQ_CLIENT || args.contains("ARM64", ignoreCase = true)) args else "winhandler.exe $args"
+    // ARM64 programs (the WoW clients) start directly, and so do the other games: winhandler.exe is x86-64
+    // and needs FEX, which only the x64 flavors ship, and they don't need it either.
+    return if (!BuildConfig.BLIZZARD_CLIENT || args.contains("ARM64", ignoreCase = true)) args else "winhandler.exe $args"
 }
 private val LAUNCH_LOG_NOISE = listOf("I replace:", "evshim:")
 

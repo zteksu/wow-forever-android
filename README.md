@@ -184,6 +184,15 @@ Classes with stances, forms or auras get a flyout on D-pad left, hunters and war
 
 The addon tells the app when a menu wants the pointer through VanillaHelpers' `WriteFile` (`VanillaHelpersData/OctoPad.txt`); the app adds `VanillaHelpers.dll` to `dlls.txt` if it's missing. Without it, the camera starts in pointer mode for the login screens and Select switches modes by hand. Targeting uses UnitXP_SP3's facing- and distance-aware functions when the client has them. Tests: `python3 tools/octopad_test/test_octopad.py` (needs `pip install lupa`) and `python3 tools/lint_lua50.py app/src/octo/assets/addons/OctoPad` (the client runs Lua 5.0).
 
+### Skyrim SE build
+
+`./gradlew assembleSkyrimModernRelease` builds **Skyrim SE** (`app.skyrimse`) for *The Elder Scrolls V: Skyrim Special Edition* (including the Anniversary content) from **GOG**, which has no copy protection. The Steam release needs the Steam client running and isn't supported.
+
+- Copy the game folder (the one with `SkyrimSE.exe` and `Data/`) to `Skyrim Special Edition/` on the device, or pick it with *Locate Game Files*. There's no updater, login or add-on catalog.
+- `SkyrimSE.exe` is 64-bit x86. It runs under the same ARM64EC Proton through FEX (`libarm64ecfex.dll`, the `fexcore-2605` build bundled in `app/src/skyrim/assets/fexcore/`), which the prefix already registers for x86-64 code. DirectX 11 goes through standard x86-64 DXVK 2.7.1, fetched from GameNative's component server on the first launch.
+- Settings live in the prefix's `Documents/My Games/Skyrim Special Edition GOG/SkyrimPrefs.ini`. The first launch writes handheld defaults: screen-sized borderless fullscreen, shadows and ambient occlusion turned down, and gamepad on. Later launches only fix a resolution that no longer fits.
+- The controller is passed through as an Xbox pad, using Skyrim's own controller support. The launch log goes to `Download/Skyrim SE-launch.log` and appears in View Logs.
+
 Each app has its own branch and release series:
 
 | Branch | App | Release tag | Release asset |
@@ -191,6 +200,7 @@ Each app has its own branch and release series:
 | `forever` | WoW Forever | `forever-v<version>` | `WoW-Forever.apk` |
 | `retail` | WoW Retail | `retail-v<version>` | `WoW-Retail.apk` |
 | `octowow` | OctoWoW | `octowow-v<version>` | `OctoWoW.apk` |
+| `skyrim` | Skyrim SE | `skyrim-v<version>` | `Skyrim-SE.apk` |
 
 `.github/workflows/release-apk.yml` publishes them: a push to one of those branches that changes `versionName` builds that app and creates its release. Each app's updater picks the newest release carrying its own APK, so the three release independently. Add the `ANDROID_KEYSTORE_*` repository secrets described in the workflow so every release is signed with the same key; otherwise each run signs with a new debug key and installed apps can't update to it.
 

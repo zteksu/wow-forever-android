@@ -4,6 +4,7 @@
 #   forever   WoW Forever   forever-v<ver>     WoW-Forever.apk
 #   retail    WoW Retail    retail-v<ver>      WoW-Retail.apk
 #   octowow   OctoWoW       octowow-v<ver>     OctoWoW.apk
+#   skyrim    Skyrim SE     skyrim-v<ver>      Skyrim-SE.apk
 #
 # Publishing: a push to one of those branches that changes versionName in app/build.gradle.kts
 # creates that app's release for the new version. Pushing a matching tag (e.g. octowow-v2.3.2)
@@ -19,9 +20,9 @@ name: Release APK
 
 on:
   push:
-    branches: [forever, retail, octowow]
+    branches: [forever, retail, octowow, skyrim]
     paths: [app/build.gradle.kts, .github/workflows/release-apk.yml]
-    tags: ["forever-v*", "retail-v*", "octowow-v*"]
+    tags: ["forever-v*", "retail-v*", "octowow-v*", "skyrim-v*"]
   workflow_dispatch:
 
 permissions:
@@ -45,7 +46,8 @@ jobs:
             forever) app=forever; flavor=forever; asset=WoW-Forever.apk ;;
             retail) app=retail; flavor=retail; asset=WoW-Retail.apk ;;
             octowow) app=octowow; flavor=octo; asset=OctoWoW.apk ;;
-            *) echo "::error::$GITHUB_REF_NAME isn't an app branch (forever, retail, octowow)"; exit 1 ;;
+            skyrim) app=skyrim; flavor=skyrim; asset=Skyrim-SE.apk ;;
+            *) echo "::error::$GITHUB_REF_NAME isn't an app branch (forever, retail, octowow, skyrim)"; exit 1 ;;
           esac
           version_of() { sed -n 's/^ *versionName = "\(.*\)"/\1/p'; }
           version=$(version_of < app/build.gradle.kts)

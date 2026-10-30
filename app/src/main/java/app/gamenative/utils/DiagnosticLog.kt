@@ -91,8 +91,8 @@ object DiagnosticLog {
         appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
         appendLine()
 
-        if (BuildConfig.MPQ_CLIENT) {
-            // XServerScreen writes the Wine launch log to Download/ for the MPQ client. It comes first so a
+        if (!BuildConfig.BLIZZARD_CLIENT) {
+            // XServerScreen writes the Wine launch log to Download/ for the emulated games. It comes first so a
             // copied or previewed report, which keeps the start, always includes how the game exited.
             val launchLog = File(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),

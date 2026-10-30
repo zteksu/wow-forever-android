@@ -92,8 +92,8 @@ android {
         )
     }
 
-    // "game" picks which World of Warcraft product the APK targets. Each game flavor is a
-    // separate app (own applicationId) so Forever and Retail can be installed side by side.
+    // "game" picks which game the APK targets. Each game flavor is a separate app (own applicationId)
+    // so they can be installed side by side.
     flavorDimensions += listOf("game", "androidApi")
     productFlavors {
         create("forever") {
@@ -114,7 +114,9 @@ android {
             buildConfigField("String", "PORTAL", "\"\"")
             buildConfigField("String", "RELEASE_APK_PREFIX", "\"WoW-Forever\"")
             buildConfigField("String", "LAUNCHER_SUBTITLE", "\"FOREVER (ARM64 NATIVE)\"")
+            buildConfigField("String", "LAUNCHER_TITLE", "\"WORLD OF WARCRAFT\"")
             buildConfigField("boolean", "MPQ_CLIENT", "false")
+            buildConfigField("boolean", "BLIZZARD_CLIENT", "true")
         }
         create("retail") {
             dimension = "game"
@@ -132,7 +134,9 @@ android {
             buildConfigField("String", "LAUNCHER_SUBTITLE", "\"RETAIL (ARM64 NATIVE)\"")
             buildConfigField("String", "LEGACY_PRODUCT", "\"\"")
             buildConfigField("String", "LEGACY_FLAVOR_DIR", "\"\"")
+            buildConfigField("String", "LAUNCHER_TITLE", "\"WORLD OF WARCRAFT\"")
             buildConfigField("boolean", "MPQ_CLIENT", "false")
+            buildConfigField("boolean", "BLIZZARD_CLIENT", "true")
         }
         // OctoWoW: a vanilla 1.12 private server (Turtle WoW based). Its client is a plain folder of
         // MPQ archives with a 32-bit x86 WoW.exe, so it runs under wowbox64 instead of natively and has
@@ -152,7 +156,31 @@ android {
             buildConfigField("String", "LAUNCHER_SUBTITLE", "\"OCTOWOW (X86 EMULATED)\"")
             buildConfigField("String", "LEGACY_PRODUCT", "\"\"")
             buildConfigField("String", "LEGACY_FLAVOR_DIR", "\"\"")
+            buildConfigField("String", "LAUNCHER_TITLE", "\"WORLD OF WARCRAFT\"")
             buildConfigField("boolean", "MPQ_CLIENT", "true")
+            buildConfigField("boolean", "BLIZZARD_CLIENT", "false")
+        }
+        // Skyrim Special Edition (with the Anniversary content) from GOG: a 64-bit x86 DirectX 11 game with
+        // no copy protection, run through FEX under ARM64EC Proton. A plain game folder: no updater, login
+        // or add-on catalog, and the game's own controller support.
+        create("skyrim") {
+            dimension = "game"
+            applicationId = "app.skyrimse"
+            resValue("string", "app_name", "Skyrim SE")
+            buildConfigField("String", "GAME_NAME", "\"Skyrim SE\"")
+            buildConfigField("String", "GAME_EDITION", "\"The Elder Scrolls V: Skyrim Special Edition (GOG)\"")
+            buildConfigField("String", "TARGET_PRODUCT", "\"\"")
+            buildConfigField("String", "FLAVOR_DIR", "\"\"")
+            buildConfigField("String", "EXE_NAME", "\"SkyrimSE.exe\"")
+            buildConfigField("String", "DEFAULT_GAME_FOLDER", "\"Skyrim Special Edition\"")
+            buildConfigField("String", "PORTAL", "\"\"")
+            buildConfigField("String", "RELEASE_APK_PREFIX", "\"Skyrim-SE\"")
+            buildConfigField("String", "LAUNCHER_SUBTITLE", "\"SPECIAL EDITION (X64 EMULATED)\"")
+            buildConfigField("String", "LAUNCHER_TITLE", "\"SKYRIM\"")
+            buildConfigField("String", "LEGACY_PRODUCT", "\"\"")
+            buildConfigField("String", "LEGACY_FLAVOR_DIR", "\"\"")
+            buildConfigField("boolean", "MPQ_CLIENT", "false")
+            buildConfigField("boolean", "BLIZZARD_CLIENT", "false")
         }
         create("modern") {
             dimension = "androidApi"
