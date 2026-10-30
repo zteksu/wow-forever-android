@@ -3,6 +3,7 @@ package app.gamenative.ui.screen.wow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +35,7 @@ import app.gamenative.ui.theme.WowGold
 import app.gamenative.ui.theme.WowMuted
 import app.gamenative.utils.DiagnosticLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // Rendering the whole report in a Text is slow. The report puts exit reasons and the last crash
@@ -42,8 +45,10 @@ private const val PREVIEW_CHARS = 40_000
 @Composable
 fun LogsDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var report by remember { mutableStateOf<String?>(null) }
     var copied by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         report = withContext(Dispatchers.IO) {
@@ -52,14 +57,19 @@ fun LogsDialog(onDismiss: () -> Unit) {
     }
 
     val preview = report?.let {
-        if (it.length > PREVIEW_CHARS) it.take(PREVIEW_CHARS) + "\n\n(preview truncated; Share includes everything)" else it
+        if (it.length > PREVIEW_CHARS) it.take(PREVIEW_CHARS) + "\n\n(preview truncated; Save and Share include everything)" else it
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.92f),
-        title = { Text(text = "Logs", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = WowGold) },
+        title = {
+            Column {
+                Text(text = "Logs", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = WowGold)
+                saved?.let { Text(text = it, fontSize = 11.sp, color = WowMuted) }
+            }
+        },
         text = {
             Box(
                 modifier = Modifier
@@ -81,15 +91,28 @@ fun LogsDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             Button(
-                onClick = { report?.let { DiagnosticLog.share(context, it) } },
+                onClick = {
+                    report?.let {
+                        scope.launch {
+                            val file = withContext(Dispatchers.IO) { DiagnosticLog.saveToDownloads(it) }
+                            saved = file?.let { f -> "Saved to Download/${f.name}" } ?: "Couldn't save to Download/"
+                        }
+                    }
+                },
                 enabled = report != null,
                 colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
                 shape = RoundedCornerShape(10.dp),
             ) {
-                Text("SHARE", fontWeight = FontWeight.Bold)
+                Text("SAVE .TXT", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
+            TextButton(
+                onClick = { report?.let { DiagnosticLog.share(context, it) } },
+                enabled = report != null,
+            ) {
+                Text("SHARE", color = WowMuted)
+            }
             TextButton(
                 onClick = {
                     report?.let {

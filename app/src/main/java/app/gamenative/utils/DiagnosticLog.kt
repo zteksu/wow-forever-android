@@ -198,6 +198,12 @@ object DiagnosticLog {
             .setPrimaryClip(ClipData.newPlainText("${BuildConfig.GAME_NAME} log", text))
     }
 
+    /** Writes [report] to Download/ as a .txt file and returns it, or null if that failed. */
+    fun saveToDownloads(report: String): File? = runCatching {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).apply { mkdirs() }
+        File(dir, "${BuildConfig.RELEASE_APK_PREFIX}-log-${fileTime.format(Date())}.txt").apply { writeText(report) }
+    }.onFailure { Timber.w(it, "Saving log failed") }.getOrNull()
+
     fun share(context: Context, report: String) {
         runCatching {
             val dir = File(context.cacheDir, "logs").apply { mkdirs() }

@@ -44,7 +44,7 @@ import app.gamenative.ui.screen.wow.WowClientDownloader.BUILD_INFO
 import app.gamenative.ui.screen.wow.WowClientDownloader.EXE_NAME
 import app.gamenative.ui.screen.wow.WowClientDownloader.FLAVOR_DIR
 import app.gamenative.ui.screen.wow.WowClientDownloader.TARGET_PRODUCT
-import app.gamenative.ui.theme.WowBackgroundGradient
+import app.gamenative.ui.components.GameBackdrop
 import app.gamenative.ui.theme.WowBronze
 import app.gamenative.ui.theme.WowError
 import app.gamenative.ui.theme.WowGold
@@ -366,10 +366,10 @@ fun WoWForeverScreen(
         }
     }
 
+    GameBackdrop {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(WowBackgroundGradient))
             .padding(24.dp)
     ) {
         Column(
@@ -667,6 +667,7 @@ fun WoWForeverScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
     }
 
     if (showLoginDialog) {
@@ -1045,7 +1046,12 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
     if (BuildConfig.MPQ_CLIENT) containerManager.getContainerById(CONTAINER_ID)?.let { MpqClient.applyControllerProfile(context, it) }
     if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
         // Skyrim reads its settings from Documents/My Games in the Wine prefix, not from the game folder.
-        containerManager.getContainerById(CONTAINER_ID)?.let { SkyrimConfig.ensure(File(it.rootDir, ".wine/drive_c/users/xuser/Documents"), screenSize) }
+        // Saves are linked into the game folder so they live with the game on the SD card.
+        containerManager.getContainerById(CONTAINER_ID)?.let {
+            val documents = File(it.rootDir, ".wine/drive_c/users/xuser/Documents")
+            SkyrimConfig.ensure(documents, screenSize)
+            runCatching { SkyrimConfig.linkSaves(documents, gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't link Skyrim saves") }
+        }
     }
     return CONTAINER_ID
 }
