@@ -119,6 +119,9 @@ fun SkyrimGraphicsDialog(documentsDir: File?, skseInstalled: Boolean, defaultRes
                         launch = launch.copy(skse = it == "On")
                     }
                 }
+                OptionRow("Quicksave when leaving the app", listOf("Off", "On"), if (launch.quicksaveOnLeave) "On" else "Off") {
+                    launch = launch.copy(quicksaveOnLeave = it == "On")
+                }
                 OptionRow("Performance overlay", SkyrimGraphics.OVERLAYS.keys.toList(), launch.overlay) {
                     launch = launch.copy(overlay = it)
                 }

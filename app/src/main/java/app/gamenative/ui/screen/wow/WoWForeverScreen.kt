@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -107,6 +108,9 @@ fun WoWForeverScreen(
     var showAddonsDialog by remember { mutableStateOf(false) }
     var graphicsDocuments by remember { mutableStateOf<File?>(null) }
     var showGraphicsDialog by remember { mutableStateOf(false) }
+    var showSavesDialog by remember { mutableStateOf(false) }
+    var latestSave by remember { mutableStateOf<SkyrimSaves.Save?>(null) }
+    var savesVersion by remember { mutableStateOf(0) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showStoragePermissionDialog by remember { mutableStateOf(false) }
@@ -335,6 +339,14 @@ fun WoWForeverScreen(
                 errorMessage = "Update failed: ${e.message}"
                 isUpdating = false
             }
+        }
+    }
+
+    // Skyrim: the newest save for the Continue card, refreshed when the game exits.
+    if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
+        LaunchedEffect(gamePath, isLaunching, savesVersion) {
+            if (isLaunching || gamePath.isEmpty()) return@LaunchedEffect
+            latestSave = withContext(Dispatchers.IO) { runCatching { SkyrimSaves.latest(File(gamePath)) }.getOrNull() }
         }
     }
 
@@ -592,6 +604,11 @@ fun WoWForeverScreen(
                         Spacer(modifier = Modifier.height(10.dp))
                     }
 
+                    latestSave?.takeIf { !filesMissing }?.let { save ->
+                        ContinueCard(save) { showSavesDialog = true }
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
                     when {
                         versionStatus?.isOutdated == true -> {
                             PrimaryButton(
@@ -667,6 +684,9 @@ fun WoWForeverScreen(
                             }
                         }
                         if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
+                            if (!filesMissing) {
+                                LinkButton("Saves", Icons.Default.Save) { showSavesDialog = true }
+                            }
                             LinkButton("Options", Icons.Default.Tune) {
                                 scope.launch {
                                     graphicsDocuments = withContext(Dispatchers.IO) { prefixDocuments(context) }
@@ -705,6 +725,14 @@ fun WoWForeverScreen(
             skseInstalled = File(gamePath, SkyrimConfig.SKSE_LOADER).isFile,
             defaultResolution = gpu.screenSize,
             onDismiss = { showGraphicsDialog = false },
+        )
+    }
+
+    if (showSavesDialog) {
+        SkyrimSavesDialog(
+            gameRoot = File(gamePath),
+            onDismiss = { showSavesDialog = false },
+            onChanged = { savesVersion++ },
         )
     }
 
@@ -1086,6 +1114,8 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
             it.putExtra(FPS_LIMITER_TARGET_EXTRA, launch.frameLimit)
             it.saveData()
             runCatching { SkyrimConfig.linkSaves(documents, gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't link Skyrim saves") }
+            onStatus("Backing up saves...")
+            runCatching { SkyrimSaves.backUp(gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't back up Skyrim saves") }
         }
     }
     return CONTAINER_ID
