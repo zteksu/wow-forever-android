@@ -1094,7 +1094,10 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
         put("showFPS", true)
         put("startupSelection", Container.STARTUP_SELECTION_AGGRESSIVE.toInt())
         put("wow64Mode", true)
-        put("wincomponents", "direct3d=0,directsound=0,directinput8=0,directinput=0,directmusic=0,directshow=0,directplay=0,vcrun2010=0,wmdecoder=0,opengl=0")
+        // Skyrim's music and voices are xWMA. Wine hands those to Proton's media converter, which plays silence
+        // for files it has no pre-converted copy of, so Skyrim gets Microsoft's XAudio2, which decodes xWMA itself.
+        val xaudio = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) "" else ",xaudio=1"
+        put("wincomponents", "direct3d=0,directsound=0,directinput8=0,directinput=0,directmusic=0,directshow=0,directplay=0,vcrun2010=0,wmdecoder=0,opengl=0$xaudio")
     }
 }
 
