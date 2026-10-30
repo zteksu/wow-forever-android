@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -102,6 +103,8 @@ fun WoWForeverScreen(
     var showLoginDialog by remember { mutableStateOf(false) }
     var showLogsDialog by remember { mutableStateOf(false) }
     var showAddonsDialog by remember { mutableStateOf(false) }
+    var graphicsDocuments by remember { mutableStateOf<File?>(null) }
+    var showGraphicsDialog by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showStoragePermissionDialog by remember { mutableStateOf(false) }
@@ -216,7 +219,8 @@ fun WoWForeverScreen(
 
         launchJob = scope.launch {
             try {
-                val screenSize = fitScreenSizeToWindow(context, gpu.screenSize)
+                val baseSize = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) gpu.screenSize else SkyrimGraphics.resolution(context) ?: gpu.screenSize
+                val screenSize = fitScreenSizeToWindow(context, baseSize)
                 val containerId = withContext(Dispatchers.IO) {
                     prepareLaunch(context, File(gamePath), gpu, screenSize) { msg ->
                         scope.launch(Dispatchers.Main) { statusText = msg }
@@ -660,6 +664,14 @@ fun WoWForeverScreen(
                                 if (!isUpdating && !isLaunching) performUpdate(verifyAll = true)
                             }
                         }
+                        if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
+                            LinkButton("Graphics", Icons.Default.Tune) {
+                                scope.launch {
+                                    graphicsDocuments = withContext(Dispatchers.IO) { prefixDocuments(context) }
+                                    showGraphicsDialog = true
+                                }
+                            }
+                        }
                         LinkButton("View Logs", Icons.Default.Description) { showLogsDialog = true }
                     }
                 }
@@ -683,6 +695,14 @@ fun WoWForeverScreen(
 
     if (showAddonsDialog) {
         AddonsDialog(gameRoot = File(gamePath), onDismiss = { showAddonsDialog = false })
+    }
+
+    if (showGraphicsDialog) {
+        SkyrimGraphicsDialog(
+            documentsDir = graphicsDocuments,
+            defaultResolution = gpu.screenSize,
+            onDismiss = { showGraphicsDialog = false },
+        )
     }
 
     if (showLogsDialog) {
@@ -997,6 +1017,12 @@ internal fun fitScreenSize(baseSize: String, windowWidth: Int, windowHeight: Int
     return "${(width / 2).roundToInt() * 2}x${(height / 2).roundToInt() * 2}"
 }
 
+private const val PREFIX_DOCUMENTS = ".wine/drive_c/users/xuser/Documents"
+
+/** The Wine prefix's Documents folder, or null before the first launch has created the prefix. */
+private fun prefixDocuments(context: Context): File? =
+    ContainerManager(context).getContainerById(CONTAINER_ID)?.let { File(it.rootDir, PREFIX_DOCUMENTS) }?.takeIf { it.isDirectory }
+
 private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, screenSize: String, onStatus: (String) -> Unit): String {
     installBundledComponents(context, onStatus)
 
@@ -1033,7 +1059,7 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
 
     onStatus("Configuring ${gpu.label} container...")
     val containerManager = ContainerManager(context)
-    val config = containerConfig(gameRoot, gpu, screenSize)
+    val config = containerConfig(gameRoot, gpu, screenSize, SkyrimGraphics.frameLimit(context))
     val container = containerManager.getContainerById(CONTAINER_ID)
     if (container == null) {
         onStatus("Creating prefix environment (first boot)...")
@@ -1048,15 +1074,15 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
         // Skyrim reads its settings from Documents/My Games in the Wine prefix, not from the game folder.
         // Saves are linked into the game folder so they live with the game on the SD card.
         containerManager.getContainerById(CONTAINER_ID)?.let {
-            val documents = File(it.rootDir, ".wine/drive_c/users/xuser/Documents")
-            SkyrimConfig.ensure(documents, screenSize)
+            val documents = File(it.rootDir, PREFIX_DOCUMENTS)
+            SkyrimConfig.ensure(documents, screenSize, SkyrimGraphics.pendingFile(context))
             runCatching { SkyrimConfig.linkSaves(documents, gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't link Skyrim saves") }
         }
     }
     return CONTAINER_ID
 }
 
-private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String): JSONObject {
+private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String, frameLimit: Int): JSONObject {
     val samsungEnv = if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) " FD_DEV_FEATURES=enable_tp_ubwc_flag_hint=1" else ""
     val envVars = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact,deck_emu MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=0 MESA_VK_WSI_PRESENT_MODE=mailbox TU_DEBUG=${gpu.tuDebug} VKD3D_SHADER_MODEL=6_0 PULSE_LATENCY_MSEC=144$samsungEnv"
     return JSONObject().apply {
@@ -1090,7 +1116,7 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
             // gplasync compiles shaders in the background instead of stalling a frame for each one, and
             // the 60 FPS cap keeps Skyrim's physics, which break above 60, sane on a 120 Hz screen.
             put("dxwrapper", "dxvk")
-            put("dxwrapperConfig", "version=$X64_DXVK_VERSION,framerate=60,maxDeviceMemory=0,async=1,asyncCache=1")
+            put("dxwrapperConfig", "version=$X64_DXVK_VERSION,framerate=$frameLimit,maxDeviceMemory=0,async=1,asyncCache=1")
             put("executablePath", "G:\\$EXE_NAME")
             put("execArgs", "")
         } else {

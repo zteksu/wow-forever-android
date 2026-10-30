@@ -8,60 +8,57 @@ import java.nio.file.Files
  * than in the game folder. The GOG release uses its own "... GOG" folder there.
  *
  * Handheld defaults are written only when there is no SkyrimPrefs.ini, so in-game changes stick. The
- * resolution is reset when it no longer fits the screen (for example after the container's screen size
- * changes), since Skyrim otherwise opens at whatever its default is and gets stretched or cropped.
+ * resolution always follows the container's screen size, which the launcher's Graphics options pick,
+ * since Skyrim otherwise opens at whatever its default is and gets stretched or cropped.
  *
- * Under x64 emulation Skyrim is held back by the CPU, mostly by draw calls. [PERFORMANCE] turns down
- * the settings that add the most of them (shadows, distant objects, reflections) and a few costly
- * post effects. It is applied once per [PERFORMANCE_VERSION], so a setting the player changes back
- * in game stays changed.
+ * Under x64 emulation Skyrim is held back by the CPU, mostly by draw calls. [PERFORMANCE] (the
+ * launcher's Medium preset) turns down the settings that add the most of them (shadows, distant
+ * objects, reflections) and a few costly post effects. It is applied once per [PERFORMANCE_VERSION],
+ * so a setting the player changes later stays changed.
  */
 object SkyrimConfig {
     internal const val GAME_FOLDER = "Skyrim Special Edition GOG"
     private const val PREFS = "SkyrimPrefs.ini"
     private const val SAVES = "Saves"
-    internal const val PERFORMANCE_VERSION = 1
+    internal const val PERFORMANCE_VERSION = 2
 
-    internal val PERFORMANCE: Map<String, Map<String, String>> = linkedMapOf(
-        "Display" to linkedMapOf(
-            "fShadowDistance" to "2000.0000",
-            "fInteriorShadowDistance" to "2000.0000",
-            "iShadowMapResolution" to "1024",
-            "bTreesReceiveShadows" to "0",
-            "bDrawLandShadows" to "0",
-            "bShadowsOnGrass" to "0",
-            "iBlurDeferredShadowMask" to "1",
-            "bVolumetricLightingEnable" to "0",
-            "bScreenSpaceReflectionEnabled" to "0",
-            "bSAOEnable" to "0",
-            "bIBLFEnable" to "0",
-            "bEnableImprovedSnow" to "0",
-        ),
-        "Imagespace" to linkedMapOf("bDoDepthOfField" to "0", "bLensFlare" to "0"),
-        "Grass" to linkedMapOf("iMinGrassSize" to "60", "fGrassStartFadeDistance" to "3000.0000"),
-        "Particles" to linkedMapOf("iMaxDesired" to "750"),
-        "Water" to linkedMapOf("bReflectLODObjects" to "0", "bReflectLODTrees" to "0"),
-        "LOD" to linkedMapOf(
-            "fLODFadeOutMultObjects" to "7.0000",
-            "fLODFadeOutMultItems" to "3.0000",
-            "fLODFadeOutMultActors" to "8.0000",
-        ),
-    )
+    /** The handheld defaults: the launcher's Medium preset. */
+    internal val PERFORMANCE: Map<Pair<String, String>, String>
+        get() = SkyrimGraphics.values(SkyrimGraphics.PRESETS.getValue(SkyrimGraphics.DEFAULT_PRESET))
 
-    fun ensure(documentsDir: File, screenSize: String) {
-        val prefs = File(documentsDir, "My Games/$GAME_FOLDER/$PREFS")
+    fun prefsFile(documentsDir: File) = File(documentsDir, "My Games/$GAME_FOLDER/$PREFS")
+
+    fun isTuned(prefs: File) = File(prefs.parentFile, ".performance-v$PERFORMANCE_VERSION").exists()
+
+    /** Marks [prefs] as tuned, so [ensure] won't apply the defaults over the player's choices. */
+    fun markTuned(prefs: File) {
+        File(prefs.parentFile, ".performance-v$PERFORMANCE_VERSION").createNewFile()
+    }
+
+    /**
+     * [pending] holds settings saved in the launcher before the prefix existed; they replace the
+     * prefix's file once it does.
+     */
+    fun ensure(documentsDir: File, screenSize: String, pending: File? = null) {
+        val prefs = prefsFile(documentsDir)
         val tuned = File(prefs.parentFile, ".performance-v$PERFORMANCE_VERSION")
+        if (pending != null && pending.isFile) {
+            prefs.parentFile?.mkdirs()
+            pending.copyTo(prefs, overwrite = true)
+            pending.delete()
+            markTuned(prefs)
+        }
         if (!prefs.isFile) {
             prefs.parentFile?.mkdirs()
             prefs.writeText(defaultPrefs(screenSize))
-            tuned.createNewFile()
+            markTuned(prefs)
             return
         }
         val original = prefs.readText()
-        var updated = fitResolution(original, screenSize)
+        var updated = setResolution(original, screenSize)
         if (!tuned.exists()) updated = applyPerformance(updated)
         if (updated != original) prefs.writeText(updated)
-        tuned.createNewFile()
+        markTuned(prefs)
     }
 
     /**
@@ -113,9 +110,7 @@ object SkyrimConfig {
     }
 
     internal fun applyPerformance(ini: String): String =
-        PERFORMANCE.entries.fold(ini) { text, (section, values) ->
-            values.entries.fold(text) { acc, (key, value) -> setValue(acc, section, key, value) }
-        }
+        PERFORMANCE.entries.fold(ini) { text, (key, value) -> setValue(text, key.first, key.second, value) }
 
     /** Sets [key] in [section], replacing it if it's there and adding it (and the section) if not. */
     internal fun setValue(ini: String, section: String, key: String, value: String): String {
@@ -142,12 +137,12 @@ object SkyrimConfig {
         return lines.joinToString(newline)
     }
 
-    /** Rewrites iSize W/H when they're missing or bigger than [screenSize]. */
-    internal fun fitResolution(ini: String, screenSize: String): String {
+    /** Sets iSize W/H to [screenSize]; Skyrim has no resolution setting in game, only in its launcher. */
+    internal fun setResolution(ini: String, screenSize: String): String {
         val (screenWidth, screenHeight) = screenSize.split("x").map { it.toInt() }
         val width = Regex("(?im)^iSize W=(\\d+)").find(ini)?.groupValues?.get(1)?.toIntOrNull()
         val height = Regex("(?im)^iSize H=(\\d+)").find(ini)?.groupValues?.get(1)?.toIntOrNull()
-        if (width != null && height != null && width in 1..screenWidth && height in 1..screenHeight) return ini
+        if (width == screenWidth && height == screenHeight) return ini
 
         val newline = if ("\r\n" in ini) "\r\n" else "\n"
         val lines = ini.split(newline).filterNot { it.startsWith("iSize W=", true) || it.startsWith("iSize H=", true) }.toMutableList()

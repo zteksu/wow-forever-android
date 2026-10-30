@@ -27,7 +27,7 @@ class SkyrimConfigTest {
     }
 
     @Test
-    fun ensure_keepsPlayerSettingsAndOnlyFixesAResolutionThatNoLongerFits() {
+    fun ensure_keepsPlayerSettingsAndMatchesTheResolutionToTheScreen() {
         val documents = tempFolder.newFolder("Documents")
         val prefs = prefsFile(documents).apply {
             parentFile!!.mkdirs()
@@ -38,17 +38,17 @@ class SkyrimConfigTest {
         SkyrimConfig.ensure(documents, "1280x720")
         assertEquals("[Display]\r\niSize W=1280\r\niSize H=720\r\nfGamma=1.2000\r\n", prefs.readText())
 
-        // A size that fits is left alone.
+        // A smaller size is raised too: the launcher's resolution picks the screen size.
         prefs.writeText("[Display]\r\niSize W=1024\r\niSize H=576\r\n")
         SkyrimConfig.ensure(documents, "1280x720")
-        assertEquals("[Display]\r\niSize W=1024\r\niSize H=576\r\n", prefs.readText())
+        assertEquals("[Display]\r\niSize W=1280\r\niSize H=720\r\n", prefs.readText())
     }
 
     @Test
-    fun fitResolution_addsADisplaySectionWhenMissing() {
+    fun setResolution_addsADisplaySectionWhenMissing() {
         assertEquals(
             "[Controls]\nbGamepadEnable=1\n[Display]\niSize W=1280\niSize H=720\n",
-            SkyrimConfig.fitResolution("[Controls]\nbGamepadEnable=1\n", "1280x720"),
+            SkyrimConfig.setResolution("[Controls]\nbGamepadEnable=1\n", "1280x720"),
         )
     }
 
@@ -71,6 +71,17 @@ class SkyrimConfigTest {
         prefs.writeText(text.replace("bDrawLandShadows=0", "bDrawLandShadows=1"))
         SkyrimConfig.ensure(documents, "1280x720")
         assertTrue(prefs.readText().contains("bDrawLandShadows=1"))
+    }
+
+    @Test
+    fun ensure_usesSettingsSavedBeforeThePrefixExisted() {
+        val documents = tempFolder.newFolder("Documents")
+        val pending = tempFolder.newFile("pending.ini").apply { writeText("[Display]\r\nbSAOEnable=1\r\n") }
+
+        SkyrimConfig.ensure(documents, "1280x720", pending)
+
+        assertEquals("[Display]\r\niSize W=1280\r\niSize H=720\r\nbSAOEnable=1\r\n", prefsFile(documents).readText())
+        assertTrue(!pending.exists())
     }
 
     @Test
