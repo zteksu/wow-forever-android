@@ -1031,6 +1031,18 @@ public class Container {
                 result += (!result.isEmpty() ? "," : "")+wincomponent1[0]+"="+value;
             }
 
+            // Keep components the defaults don't list (xaudio, ...) instead of silently dropping them.
+            for (String[] wincomponent2 : wincomponents2) {
+                boolean known = false;
+                for (String[] wincomponent1 : wincomponents1) {
+                    if (wincomponent1[0].equals(wincomponent2[0])) {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known) result += (!result.isEmpty() ? "," : "")+wincomponent2[0]+"="+wincomponent2[1];
+            }
+
             data.put("wincomponents", result);
         }
         catch (JSONException e) {
