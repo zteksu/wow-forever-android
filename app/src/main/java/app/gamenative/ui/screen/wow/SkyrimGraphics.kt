@@ -247,6 +247,7 @@ object SkyrimGraphics {
     private const val KEY_OVERLAY = "overlay"
     private const val KEY_SKSE = "skse"
     private const val KEY_QUICKSAVE = "quicksave_on_leave"
+    private const val KEY_DRIVER = "driver"
 
     /** 16:9 render sizes; the launch reshapes them to the screen's aspect ratio. */
     val RESOLUTIONS = listOf("960x540", "1280x720", "1600x900", "1920x1080")
@@ -272,6 +273,8 @@ object SkyrimGraphics {
         val overlay: String = "Off",
         val skse: Boolean = true,
         val quicksaveOnLeave: Boolean = true,
+        /** A Turnip driver from contents/adrenotools, or null for the one recommended for this GPU. */
+        val driver: String? = null,
     ) {
         val hud: String get() = OVERLAYS[overlay].orEmpty()
     }
@@ -289,6 +292,7 @@ object SkyrimGraphics {
             },
             skse = prefs.getBoolean(KEY_SKSE, true),
             quicksaveOnLeave = prefs.getBoolean(KEY_QUICKSAVE, true),
+            driver = prefs.getString(KEY_DRIVER, null),
         )
     }
 
@@ -300,6 +304,7 @@ object SkyrimGraphics {
             .putString(KEY_OVERLAY, launch.overlay)
             .putBoolean(KEY_SKSE, launch.skse)
             .putBoolean(KEY_QUICKSAVE, launch.quicksaveOnLeave)
+            .apply { if (launch.driver == null) remove(KEY_DRIVER) else putString(KEY_DRIVER, launch.driver) }
             .apply()
         PrefManager.showFps = launch.overlay == "FPS"
     }

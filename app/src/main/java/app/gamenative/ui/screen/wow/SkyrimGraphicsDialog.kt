@@ -50,7 +50,7 @@ import timber.log.Timber
  * then kept in [SkyrimGraphics.pendingFile] until it exists.
  */
 @Composable
-fun SkyrimGraphicsDialog(documentsDir: File?, skseInstalled: Boolean, defaultResolution: String, onDismiss: () -> Unit) {
+fun SkyrimGraphicsDialog(documentsDir: File?, skseInstalled: Boolean, recommendedDriver: String, defaultResolution: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var ini by remember { mutableStateOf<String?>(null) }
@@ -149,6 +149,9 @@ fun SkyrimGraphicsDialog(documentsDir: File?, skseInstalled: Boolean, defaultRes
                 OptionRow("Frame limit", SkyrimGraphics.FRAME_LIMITS.map { "$it FPS" }, "${launch.frameLimit} FPS") {
                     launch = launch.copy(frameLimit = it.substringBefore(' ').toInt())
                 }
+
+                Heading("Graphics driver")
+                DriverSection(launch.driver, recommendedDriver) { launch = launch.copy(driver = it) }
 
                 for (section in listOf(SkyrimGraphics.QUALITY, SkyrimGraphics.EFFECTS, SkyrimGraphics.DISTANCE)) {
                     Heading(section)

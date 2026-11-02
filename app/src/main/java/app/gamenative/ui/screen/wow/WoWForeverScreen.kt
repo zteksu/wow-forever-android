@@ -723,6 +723,7 @@ fun WoWForeverScreen(
         SkyrimGraphicsDialog(
             documentsDir = graphicsDocuments,
             skseInstalled = File(gamePath, SkyrimConfig.SKSE_LOADER).isFile,
+            recommendedDriver = gpu.driver,
             defaultResolution = gpu.screenSize,
             onDismiss = { showGraphicsDialog = false },
         )
@@ -1001,6 +1002,9 @@ private fun Throwable.isPermissionDenied() =
 
 private const val DEFAULT_DRIVER = "Turnip-WoW-scheduler-test"
 private const val ADRENO_8XX_DRIVER = "Turnip-V32-RP6sched"
+
+/** The Turnip drivers that ship in the APK; downloaded ones can't replace or remove them. */
+internal val BUNDLED_DRIVERS = setOf(DEFAULT_DRIVER, ADRENO_8XX_DRIVER)
 private const val PROTON_VERSION = "proton-11.0-90624-arm64ec"
 private const val DXVK_VERSION = "2.4.1-wow-aarch64-test"
 private const val X64_DXVK_VERSION = "2.6.1-gplasync"
@@ -1091,7 +1095,11 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
     onStatus("Configuring ${gpu.label} container...")
     val containerManager = ContainerManager(context)
     val launch = SkyrimGraphics.launch(context)
-    val config = containerConfig(gameRoot, gpu, screenSize, launch)
+    // A driver picked in Options, if it's still installed; otherwise the one recommended for this GPU.
+    val chosenDriver = launch.driver?.takeIf {
+        !BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT && File(TurnipDrivers.driversDir(context), "$it/meta.json").isFile
+    }
+    val config = containerConfig(gameRoot, chosenDriver?.let { gpu.copy(driver = it) } ?: gpu, screenSize, launch)
     val container = containerManager.getContainerById(CONTAINER_ID)
     if (container == null) {
         onStatus("Creating prefix environment (first boot)...")
