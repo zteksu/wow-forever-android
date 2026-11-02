@@ -252,7 +252,8 @@ object SkyrimGraphics {
     /** 16:9 render sizes; the launch reshapes them to the screen's aspect ratio. */
     val RESOLUTIONS = listOf("960x540", "1280x720", "1600x900", "1920x1080")
     val FRAME_LIMITS = listOf(30, 40, 60)
-    const val DEFAULT_FRAME_LIMIT = 60
+    /** 60 suits Skyrim, whose physics break above it; No Man's Sky is heavy enough here to want 30. */
+    val DEFAULT_FRAME_LIMIT get() = if (GameProfile.isNms) 30 else 60
 
     /**
      * Performance overlays: label -> DXVK_HUD value. FPS is the app's own counter (also in the in-game

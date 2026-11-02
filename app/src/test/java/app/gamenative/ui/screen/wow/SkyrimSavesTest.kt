@@ -97,7 +97,7 @@ class SkyrimSavesTest {
     fun backUp_keepsTheNewestSavesWithSkseDataAndOnlyRunsWhenSomethingChanged() {
         val game = tempFolder.newFolder("Game")
         for (i in 1..7) save(game, "Save$i.ess", 1_000_000_000_000 + i * 1000L)
-        File(game, "Saves/Save7.skse").writeText("co-save")
+        File(game, "Saves/Save7.skse").apply { writeText("co-save"); setLastModified(1_000_000_007_000) }
 
         val first = SkyrimSaves.backUp(game, now = 1_000_000_100_000)
         assertNotNull(first)

@@ -193,7 +193,7 @@ fun SkyrimGraphicsDialog(documentsDir: File?, skseInstalled: Boolean, recommende
 }
 
 @Composable
-private fun Heading(text: String) {
+internal fun Heading(text: String) {
     Text(
         text = text.uppercase(),
         fontSize = 11.sp,
@@ -205,7 +205,7 @@ private fun Heading(text: String) {
 }
 
 @Composable
-private fun OptionRow(label: String, choices: List<String>, selected: String?, onSelect: (String) -> Unit) {
+internal fun OptionRow(label: String, choices: List<String>, selected: String?, onSelect: (String) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

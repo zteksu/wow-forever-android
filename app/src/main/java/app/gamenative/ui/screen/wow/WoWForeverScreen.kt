@@ -109,7 +109,7 @@ fun WoWForeverScreen(
     var graphicsDocuments by remember { mutableStateOf<File?>(null) }
     var showGraphicsDialog by remember { mutableStateOf(false) }
     var showSavesDialog by remember { mutableStateOf(false) }
-    var latestSave by remember { mutableStateOf<SkyrimSaves.Save?>(null) }
+    var latestSave by remember { mutableStateOf<SaveSummary?>(null) }
     var savesVersion by remember { mutableStateOf(0) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -342,11 +342,11 @@ fun WoWForeverScreen(
         }
     }
 
-    // Skyrim: the newest save for the Continue card, refreshed when the game exits.
-    if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
+    // The newest save for the Continue card, refreshed when the game exits.
+    GameProfile.saves?.let { store ->
         LaunchedEffect(gamePath, isLaunching, savesVersion) {
             if (isLaunching || gamePath.isEmpty()) return@LaunchedEffect
-            latestSave = withContext(Dispatchers.IO) { runCatching { SkyrimSaves.latest(File(gamePath)) }.getOrNull() }
+            latestSave = withContext(Dispatchers.IO) { runCatching { store.latest(File(gamePath)) }.getOrNull() }
         }
     }
 
@@ -438,7 +438,7 @@ fun WoWForeverScreen(
                             CheckItem(label = "Realm List ($REALMLIST)", ready = files.realmlistExists)
                         } else if (!BuildConfig.BLIZZARD_CLIENT) {
                             CheckItem(label = "Game Executable ($EXE_NAME)", ready = files.exeExists)
-                            CheckItem(label = "Game Data (Data/)", ready = files.dataExists)
+                            CheckItem(label = "Game Data (${GameProfile.dataDir}/)", ready = files.dataExists)
                         } else {
                             CheckItem(label = if (files.exeExists) "ARM64 Binary ($EXE_NAME)" else "ARM64 Binary (downloads on Play)", ready = files.exeExists)
                             CheckItem(label = "Game Asset Archives (Data/)", ready = files.dataExists)
@@ -684,7 +684,7 @@ fun WoWForeverScreen(
                             }
                         }
                         if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
-                            if (!filesMissing) {
+                            if (!filesMissing && GameProfile.saves != null) {
                                 LinkButton("Saves", Icons.Default.Save) { showSavesDialog = true }
                             }
                             LinkButton("Options", Icons.Default.Tune) {
@@ -719,7 +719,16 @@ fun WoWForeverScreen(
         AddonsDialog(gameRoot = File(gamePath), onDismiss = { showAddonsDialog = false })
     }
 
-    if (showGraphicsDialog) {
+    if (showGraphicsDialog && GameProfile.isNms) {
+        NmsOptionsDialog(
+            gameRoot = File(gamePath),
+            recommendedDriver = gpu.driver,
+            defaultResolution = gpu.screenSize,
+            onDismiss = { showGraphicsDialog = false },
+        )
+    }
+
+    if (showGraphicsDialog && GameProfile.isSkyrim) {
         SkyrimGraphicsDialog(
             documentsDir = graphicsDocuments,
             skseInstalled = File(gamePath, SkyrimConfig.SKSE_LOADER).isFile,
@@ -729,9 +738,11 @@ fun WoWForeverScreen(
         )
     }
 
-    if (showSavesDialog) {
+    val saveStore = GameProfile.saves
+    if (showSavesDialog && saveStore != null) {
         SkyrimSavesDialog(
             gameRoot = File(gamePath),
+            store = saveStore,
             onDismiss = { showSavesDialog = false },
             onChanged = { savesVersion++ },
         )
@@ -920,7 +931,7 @@ object GamePath {
         }
         return Status(
             exeExists = File(root, "$FLAVOR_DIR/$EXE_NAME").exists(),
-            dataExists = File(root, "Data").listFiles()?.isNotEmpty() == true,
+            dataExists = File(root, GameProfile.dataDir).listFiles()?.isNotEmpty() == true,
             buildInfoExists = File(root, INSTALL_MARKER).isFile,
             product = productOf(root).orEmpty(),
             hasStorageAccess = StorageUtils.hasStoragePermission(context, path),
@@ -1110,17 +1121,31 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
     }
     check(containerManager.hasContainer(CONTAINER_ID)) { "Container creation failed. Check system storage and logs." }
     if (BuildConfig.MPQ_CLIENT) containerManager.getContainerById(CONTAINER_ID)?.let { MpqClient.applyControllerProfile(context, it) }
-    if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
+    if (GameProfile.isPlainGame) {
+        containerManager.getContainerById(CONTAINER_ID)?.let {
+            // The app's own frame limiter (also in the in-game menu) follows the launcher's frame limit.
+            it.putExtra(FPS_LIMITER_ENABLED_EXTRA, true)
+            it.putExtra(FPS_LIMITER_TARGET_EXTRA, launch.frameLimit)
+            it.saveData()
+        }
+    }
+    if (GameProfile.isNms) {
+        // Settings live in the game folder; saves in the prefix's AppData, linked into the game folder.
+        runCatching { NmsConfig.ensure(gameRoot, screenSize, launch.frameLimit) }.onFailure { e -> Timber.w(e, "Couldn't update No Man's Sky settings") }
+        containerManager.getContainerById(CONTAINER_ID)?.let {
+            runCatching { SkyrimConfig.linkFolder(File(it.rootDir, NmsConfig.PREFIX_SAVES), SkyrimSaves.savesDir(gameRoot)) }
+                .onFailure { e -> Timber.w(e, "Couldn't link No Man's Sky saves") }
+        }
+        onStatus("Backing up saves...")
+        runCatching { NmsSaves.backUp(gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't back up No Man's Sky saves") }
+    }
+    if (GameProfile.isSkyrim) {
         // Skyrim reads its settings from Documents/My Games in the Wine prefix, not from the game folder.
         // Saves are linked into the game folder so they live with the game on the SD card.
         containerManager.getContainerById(CONTAINER_ID)?.let {
             val documents = File(it.rootDir, PREFIX_DOCUMENTS)
             SkyrimConfig.ensure(documents, screenSize, SkyrimGraphics.pendingFile(context))
             runCatching { SkyrimConfig.applyIntro(documents, gameRoot, launch.skipIntro) }.onFailure { e -> Timber.w(e, "Couldn't set the intro video") }
-            // The app's own frame limiter (also in the in-game menu) follows the launcher's frame limit.
-            it.putExtra(FPS_LIMITER_ENABLED_EXTRA, true)
-            it.putExtra(FPS_LIMITER_TARGET_EXTRA, launch.frameLimit)
-            it.saveData()
             runCatching { SkyrimConfig.linkSaves(documents, gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't link Skyrim saves") }
             onStatus("Backing up saves...")
             runCatching { SkyrimSaves.backUp(gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't back up Skyrim saves") }
@@ -1165,7 +1190,10 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String,
             // the 60 FPS cap keeps Skyrim's physics, which break above 60, sane on a 120 Hz screen.
             put("dxwrapper", "dxvk")
             put("dxwrapperConfig", "version=$X64_DXVK_VERSION,framerate=${launch.frameLimit},maxDeviceMemory=0,async=1,asyncCache=1")
-            put("executablePath", "G:\\${SkyrimConfig.launchExe(gameRoot, launch.skse, EXE_NAME)}")
+            // No Man's Sky renders with Vulkan, which Wine hands to Turnip directly; DXVK is only used by
+            // DirectX games like Skyrim, and sits unused otherwise.
+            val exe = if (GameProfile.isSkyrim) SkyrimConfig.launchExe(gameRoot, launch.skse, EXE_NAME) else EXE_NAME
+            put("executablePath", "G:\\${exe.replace('/', '\\')}")
             put("execArgs", "")
         } else {
             put("executablePath", "G:\\$FLAVOR_DIR\\$EXE_NAME")
@@ -1177,7 +1205,7 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String,
         // Skyrim's music and voices are xWMA. Wine's XAudio2 decodes those through its WMA decoder and Proton's
         // media converter, which fails without its pre-converted database and plays silence. Microsoft's XAudio2
         // decodes xWMA itself. (Microsoft's WMA decoder under Wine's XAudio2 crashes in Wine's mfplat instead.)
-        val xaudio = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) "" else ",xaudio=1"
+        val xaudio = if (GameProfile.isSkyrim) ",xaudio=1" else ""
         put("wincomponents", "direct3d=0,directsound=0,directinput8=0,directinput=0,directmusic=0,directshow=0,directplay=0,vcrun2010=0,wmdecoder=0,opengl=0$xaudio")
     }
 }

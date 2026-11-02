@@ -117,6 +117,7 @@ android {
             buildConfigField("String", "LAUNCHER_TITLE", "\"WORLD OF WARCRAFT\"")
             buildConfigField("boolean", "MPQ_CLIENT", "false")
             buildConfigField("boolean", "BLIZZARD_CLIENT", "true")
+            buildConfigField("String", "GAME_PROFILE", "\"\"")
         }
         create("retail") {
             dimension = "game"
@@ -137,6 +138,7 @@ android {
             buildConfigField("String", "LAUNCHER_TITLE", "\"WORLD OF WARCRAFT\"")
             buildConfigField("boolean", "MPQ_CLIENT", "false")
             buildConfigField("boolean", "BLIZZARD_CLIENT", "true")
+            buildConfigField("String", "GAME_PROFILE", "\"\"")
         }
         // OctoWoW: a vanilla 1.12 private server (Turtle WoW based). Its client is a plain folder of
         // MPQ archives with a 32-bit x86 WoW.exe, so it runs under wowbox64 instead of natively and has
@@ -159,6 +161,7 @@ android {
             buildConfigField("String", "LAUNCHER_TITLE", "\"WORLD OF WARCRAFT\"")
             buildConfigField("boolean", "MPQ_CLIENT", "true")
             buildConfigField("boolean", "BLIZZARD_CLIENT", "false")
+            buildConfigField("String", "GAME_PROFILE", "\"\"")
         }
         // Skyrim Special Edition (with the Anniversary content) from GOG: a 64-bit x86 DirectX 11 game with
         // no copy protection, run through FEX under ARM64EC Proton. A plain game folder: no updater, login
@@ -181,6 +184,27 @@ android {
             buildConfigField("String", "LEGACY_FLAVOR_DIR", "\"\"")
             buildConfigField("boolean", "MPQ_CLIENT", "false")
             buildConfigField("boolean", "BLIZZARD_CLIENT", "false")
+            buildConfigField("String", "GAME_PROFILE", "\"skyrim\"")
+        }
+        create("nms") {
+            dimension = "game"
+            applicationId = "app.nomanssky"
+            resValue("string", "app_name", "No Man\\'s Sky")
+            buildConfigField("String", "GAME_NAME", "\"No Man's Sky\"")
+            buildConfigField("String", "GAME_EDITION", "\"No Man's Sky (GOG)\"")
+            buildConfigField("String", "TARGET_PRODUCT", "\"\"")
+            buildConfigField("String", "FLAVOR_DIR", "\"\"")
+            buildConfigField("String", "EXE_NAME", "\"Binaries/NMS.exe\"")
+            buildConfigField("String", "DEFAULT_GAME_FOLDER", "\"No Man's Sky\"")
+            buildConfigField("String", "PORTAL", "\"\"")
+            buildConfigField("String", "RELEASE_APK_PREFIX", "\"No-Mans-Sky\"")
+            buildConfigField("String", "LAUNCHER_SUBTITLE", "\"PC (X64 EMULATED)\"")
+            buildConfigField("String", "LAUNCHER_TITLE", "\"NO MAN'S SKY\"")
+            buildConfigField("String", "LEGACY_PRODUCT", "\"\"")
+            buildConfigField("String", "LEGACY_FLAVOR_DIR", "\"\"")
+            buildConfigField("boolean", "MPQ_CLIENT", "false")
+            buildConfigField("boolean", "BLIZZARD_CLIENT", "false")
+            buildConfigField("String", "GAME_PROFILE", "\"nms\"")
         }
         create("modern") {
             dimension = "androidApi"
@@ -255,6 +279,12 @@ android {
         getByName("modern") {
             assets {
                 srcDirs("src/modern/assets", "src/main/assets")
+            }
+        }
+        // No Man's Sky runs on the same x64 FEX build that the Skyrim flavor bundles.
+        getByName("nms") {
+            assets {
+                srcDirs("src/nms/assets", "src/skyrim/assets")
             }
         }
     }

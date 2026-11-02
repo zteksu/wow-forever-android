@@ -95,25 +95,31 @@ object SkyrimConfig {
      * files. Saves already in the prefix are copied over first (an existing save of the same name in the
      * game folder wins) and the old folder is kept as `Saves.old`.
      */
-    fun linkSaves(documentsDir: File, gameRoot: File) {
-        val target = File(gameRoot, SAVES)
-        val link = File(documentsDir, "My Games/$GAME_FOLDER/$SAVES").toPath()
+    fun linkSaves(documentsDir: File, gameRoot: File) =
+        linkFolder(File(documentsDir, "My Games/$GAME_FOLDER/$SAVES"), File(gameRoot, SAVES))
+
+    /**
+     * Makes [link] a symbolic link to [target]. Files already at [link] are copied into [target] first
+     * (files already in [target] win) and the old folder is kept beside it with ".old" added.
+     */
+    fun linkFolder(link: File, target: File) {
+        val path = link.toPath()
         target.mkdirs()
         check(target.isDirectory) { "Can't create $target" }
-        if (Files.isSymbolicLink(link)) {
-            if (Files.readSymbolicLink(link) == target.toPath()) return
-            Files.delete(link)
-        } else if (Files.isDirectory(link)) {
-            link.toFile().listFiles()?.forEach { save ->
+        if (Files.isSymbolicLink(path)) {
+            if (Files.readSymbolicLink(path) == target.toPath()) return
+            Files.delete(path)
+        } else if (Files.isDirectory(path)) {
+            link.listFiles()?.forEach { save ->
                 val copy = File(target, save.name)
                 if (!copy.exists()) save.copyRecursively(copy)
             }
-            val old = File(link.parent.toFile(), "$SAVES.old")
+            val old = File(link.parentFile, "${link.name}.old")
             old.deleteRecursively()
-            check(link.toFile().renameTo(old)) { "Can't move the old Saves folder aside" }
+            check(link.renameTo(old)) { "Can't move the old ${link.name} folder aside" }
         }
-        Files.createDirectories(link.parent)
-        Files.createSymbolicLink(link, target.toPath())
+        Files.createDirectories(path.parent)
+        Files.createSymbolicLink(path, target.toPath())
     }
 
     internal fun defaultPrefs(screenSize: String): String {

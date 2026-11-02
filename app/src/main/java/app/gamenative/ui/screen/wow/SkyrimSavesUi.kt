@@ -55,17 +55,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
-private fun SkyrimSaves.Save.thumbnail(): ImageBitmap? = runCatching {
-    argb()?.let { Bitmap.createBitmap(it, shotWidth, shotHeight, Bitmap.Config.ARGB_8888).asImageBitmap() }
+private fun SaveSummary.thumbnail(): ImageBitmap? = runCatching {
+    shot?.let { Bitmap.createBitmap(it, shotWidth, shotHeight, Bitmap.Config.ARGB_8888).asImageBitmap() }
 }.getOrNull()
 
 private fun relativeTime(millis: Long): String =
     DateUtils.getRelativeTimeSpanString(millis, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
 
-/** The newest save above the Play button: the main menu's Continue loads it. */
+/** The newest save above the Play button. */
 @Composable
-fun ContinueCard(save: SkyrimSaves.Save, onClick: () -> Unit) {
-    val thumbnail = remember(save.file, save.savedAt) { save.thumbnail() }
+fun ContinueCard(save: SaveSummary, onClick: () -> Unit) {
+    val thumbnail = remember(save) { save.thumbnail() }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -76,20 +76,24 @@ fun ContinueCard(save: SkyrimSaves.Save, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(10.dp),
     ) {
-        Thumbnail(thumbnail, width = 128)
-        Spacer(modifier = Modifier.width(12.dp))
+        if (save.shot != null) {
+            Thumbnail(thumbnail, width = 128)
+            Spacer(modifier = Modifier.width(12.dp))
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text("CONTINUE", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = WowGold)
             Text(
-                "${save.name} · Level ${save.level}",
+                save.title,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(save.location, fontSize = 12.sp, color = Color(0xFFCBD5E1), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${save.kind} · ${relativeTime(save.savedAt)}", fontSize = 11.sp, color = WowMuted)
+            if (save.subtitle.isNotBlank()) {
+                Text(save.subtitle, fontSize = 12.sp, color = Color(0xFFCBD5E1), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text(relativeTime(save.savedAt), fontSize = 11.sp, color = WowMuted)
         }
     }
 }
@@ -109,9 +113,9 @@ private fun Thumbnail(image: ImageBitmap?, width: Int) {
 
 /** Recent saves and their backups, with Back up now and Restore. */
 @Composable
-fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Unit) {
+fun SkyrimSavesDialog(gameRoot: File, store: SaveStore, onDismiss: () -> Unit, onChanged: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var saves by remember { mutableStateOf<List<SkyrimSaves.Save>?>(null) }
+    var saves by remember { mutableStateOf<List<SaveSummary>?>(null) }
     var backups by remember { mutableStateOf<List<SkyrimSaves.Backup>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -120,8 +124,8 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
 
     LaunchedEffect(refresh) {
         withContext(Dispatchers.IO) {
-            saves = SkyrimSaves.list(gameRoot, limit = 30)
-            backups = SkyrimSaves.backups(gameRoot)
+            saves = store.recent(gameRoot, limit = 30)
+            backups = store.backups(gameRoot)
         }
     }
 
@@ -177,7 +181,7 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 Text(
-                    "Each keeps your ${SkyrimSaves.SAVES_PER_BACKUP} newest saves; the last ${SkyrimSaves.BACKUPS_KEPT} are kept in ${SkyrimSaves.BACKUPS}/.",
+                    "Each keeps ${store.backupContents}; the last ${SkyrimSaves.BACKUPS_KEPT} are kept in ${SkyrimSaves.BACKUPS}/.",
                     fontSize = 11.sp,
                     color = WowMuted,
                 )
@@ -205,7 +209,7 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
         },
         confirmButton = {
             Button(
-                onClick = { run("Backing up...", "Backed up") { SkyrimSaves.backUp(gameRoot, force = true) } },
+                onClick = { run("Backing up...", "Backed up") { store.backUp(gameRoot, force = true) } },
                 enabled = !busy && !saves.isNullOrEmpty(),
                 colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
                 shape = RoundedCornerShape(10.dp),
@@ -236,7 +240,7 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
                 Button(
                     onClick = {
                         confirmRestore = null
-                        run("Restoring...", "Restored. Load it from the main menu.") { SkyrimSaves.restore(gameRoot, backup.file) }
+                        run("Restoring...", "Restored. ${store.loadHint}") { store.restore(gameRoot, backup.file) }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
                 ) { Text("RESTORE") }
@@ -248,23 +252,27 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
 }
 
 @Composable
-private fun SaveRow(save: SkyrimSaves.Save) {
-    val thumbnail = remember(save.file, save.savedAt) { save.thumbnail() }
+private fun SaveRow(save: SaveSummary) {
+    val thumbnail = remember(save) { save.thumbnail() }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Thumbnail(thumbnail, width = 96)
-        Spacer(modifier = Modifier.width(10.dp))
+        if (save.shot != null) {
+            Thumbnail(thumbnail, width = 96)
+            Spacer(modifier = Modifier.width(10.dp))
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                "${save.name} · Level ${save.level}",
+                save.title,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(save.location, fontSize = 12.sp, color = Color(0xFFCBD5E1), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (save.subtitle.isNotBlank()) {
+                Text(save.subtitle, fontSize = 12.sp, color = Color(0xFFCBD5E1), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Text(
-                "${save.kind} · ${relativeTime(save.savedAt)} · ${save.gameDate}",
+                "${relativeTime(save.savedAt)} · ${save.detail}",
                 fontSize = 11.sp,
                 color = WowMuted,
                 maxLines = 1,

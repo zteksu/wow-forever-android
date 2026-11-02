@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Draws a game flavor's launcher icon set into app/src/<flavor>/res.
 
-Usage: make_flavor_icon.py [retail|octo|skyrim] [font.ttf] [--emblem image.png]
+Usage: make_flavor_icon.py [retail|octo|skyrim|nms] [font.ttf] [--emblem image.png]
 
 Original artwork (no Blizzard or Bethesda assets): a gold-rimmed medallion with a
 monogram ("WoW", "SE") and a ribbon naming the flavor, in the same dark/gold palette
@@ -35,6 +35,7 @@ FLAVORS = {
     "retail": ("WoW", "RETAIL", lambda t: (40 - 32 * t, 150 - 115 * t, 215 - 140 * t)),  # sapphire
     "octo": ("WoW", "OCTO", lambda t: (34 - 26 * t, 168 - 120 * t, 138 - 96 * t)),  # teal
     "skyrim": ("SE", "SKYRIM", lambda t: (120 - 95 * t, 136 - 106 * t, 152 - 112 * t)),  # frost steel
+    "nms": ("NMS", "PC", lambda t: (226 - 150 * t, 112 - 86 * t, 40 - 28 * t)),  # sunset orange
 }
 MONOGRAM, RIBBON, FACE = FLAVORS[FLAVOR]
 BACKGROUND = (0x0A, 0x0E, 0x17)

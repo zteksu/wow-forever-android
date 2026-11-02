@@ -140,30 +140,40 @@ object SkyrimSaves {
     private fun companions(save: File): List<File> =
         listOf(save) + File(save.parentFile, save.nameWithoutExtension + ".skse").takeIf { it.isFile }.let { listOfNotNull(it) }
 
-    fun backups(gameRoot: File): List<Backup> =
+    fun backups(gameRoot: File, isSave: (String) -> Boolean = { it.endsWith(".ess", ignoreCase = true) }): List<Backup> =
         backupsDir(gameRoot).listFiles { f -> f.isFile && f.name.endsWith(".zip") }
             .orEmpty()
             .sortedByDescending { it.name }
             .map { zip ->
                 val names = runCatching {
                     ZipInputStream(zip.inputStream().buffered()).use { input ->
-                        generateSequence { input.nextEntry }.map { it.name }.filter { it.endsWith(".ess", true) }.toList()
+                        generateSequence { input.nextEntry }.map { it.name }.filter { isSave(it.substringAfterLast('/')) }.toList()
                     }
                 }.getOrDefault(emptyList())
                 Backup(zip, zip.lastModified(), names)
             }
 
+    /** Skyrim's newest saves, with their SKSE data. */
+    fun newestSaves(gameRoot: File): List<File> = saveFiles(gameRoot).take(SAVES_PER_BACKUP).flatMap { companions(it) }
+
     /**
-     * Zips the newest [SAVES_PER_BACKUP] saves (and their SKSE data) into SaveBackups/, keeping the
-     * newest [BACKUPS_KEPT] backups. Skipped, returning null, when no save is newer than the last
-     * backup, unless [force].
+     * Zips the saves [select] picks (by default the newest [SAVES_PER_BACKUP] saves and their SKSE data)
+     * into SaveBackups/, keeping the newest [BACKUPS_KEPT] backups. Skipped, returning null, when no save
+     * is newer than the last backup, unless [force].
      */
-    fun backUp(gameRoot: File, force: Boolean = false, now: Long = System.currentTimeMillis(), keep: File? = null): File? {
-        val saves = saveFiles(gameRoot).take(SAVES_PER_BACKUP)
+    fun backUp(
+        gameRoot: File,
+        force: Boolean = false,
+        now: Long = System.currentTimeMillis(),
+        keep: File? = null,
+        select: (File) -> List<File> = ::newestSaves,
+    ): File? {
+        val saves = select(gameRoot)
         if (saves.isEmpty()) return null
+        val root = savesDir(gameRoot)
         val dir = backupsDir(gameRoot).apply { mkdirs() }
         val last = backups(gameRoot).firstOrNull()
-        if (!force && last != null && saves.first().lastModified() <= last.createdAt) return null
+        if (!force && last != null && saves.maxOf { it.lastModified() } <= last.createdAt) return null
 
         var zip = File(dir, "Saves-${backupTime.format(Date(now))}.zip")
         var n = 2
@@ -172,8 +182,8 @@ object SkyrimSaves {
         ZipOutputStream(partial.outputStream().buffered()).use { out ->
             // Saves are compressed already.
             out.setLevel(0)
-            for (file in saves.flatMap { companions(it) }) {
-                out.putNextEntry(ZipEntry(file.name).apply { time = file.lastModified() })
+            for (file in saves) {
+                out.putNextEntry(ZipEntry(file.relativeTo(root).invariantSeparatorsPath).apply { time = file.lastModified() })
                 file.inputStream().use { it.copyTo(out) }
                 out.closeEntry()
             }
@@ -186,16 +196,19 @@ object SkyrimSaves {
 
     /**
      * Puts [backup]'s saves back into Saves/, replacing saves of the same name. The current saves are
-     * backed up first, so a restore can be undone.
+     * backed up first (with [select], as for [backUp]), so a restore can be undone.
      */
-    fun restore(gameRoot: File, backup: File) {
+    fun restore(gameRoot: File, backup: File, select: (File) -> List<File> = ::newestSaves) {
         val saves = savesDir(gameRoot).apply { mkdirs() }
-        backUp(gameRoot, force = true, keep = backup)
+        val base = saves.canonicalFile
+        backUp(gameRoot, force = true, keep = backup, select = select)
         ZipInputStream(backup.inputStream().buffered()).use { input ->
             for (entry in generateSequence { input.nextEntry }) {
-                // Only plain file names: never write outside Saves/.
-                if (entry.isDirectory || entry.name.contains('/') || entry.name.contains('\\') || entry.name.startsWith(".")) continue
-                val target = File(saves, entry.name)
+                if (entry.isDirectory || entry.name.contains('\\')) continue
+                val target = File(saves, entry.name).canonicalFile
+                // Never write outside Saves/.
+                if (!target.path.startsWith(base.path + File.separator) || target.name.startsWith(".")) continue
+                target.parentFile?.mkdirs()
                 target.outputStream().use { input.copyTo(it) }
                 if (entry.time > 0) target.setLastModified(entry.time)
             }

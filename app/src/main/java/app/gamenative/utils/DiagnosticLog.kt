@@ -14,6 +14,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import app.gamenative.BuildConfig
 import app.gamenative.CrashHandler
+import app.gamenative.ui.screen.wow.GameProfile
 import app.gamenative.ui.screen.wow.GamePath
 import app.gamenative.ui.screen.wow.SkyrimConfig
 import app.gamenative.ui.screen.wow.prefixDocuments
@@ -139,7 +140,7 @@ object DiagnosticLog {
     /** The client's own logs from its folder: the DXVK log and the newest Logs/ and Errors/ files. */
     private fun StringBuilder.appendGameFolderLogs(context: Context) {
         val root = File(GamePath.load(context))
-        val skse = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) {
+        val skse = if (!GameProfile.isSkyrim) {
             emptyList()
         } else {
             prefixDocuments(context)?.let { SkyrimConfig.skseLogs(it) }.orEmpty().filter { it.isFile }

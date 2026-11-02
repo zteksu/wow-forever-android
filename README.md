@@ -184,6 +184,16 @@ Classes with stances, forms or auras get a flyout on D-pad left, hunters and war
 
 The addon tells the app when a menu wants the pointer through VanillaHelpers' `WriteFile` (`VanillaHelpersData/OctoPad.txt`); the app adds `VanillaHelpers.dll` to `dlls.txt` if it's missing. Without it, the camera starts in pointer mode for the login screens and Select switches modes by hand. Targeting uses UnitXP_SP3's facing- and distance-aware functions when the client has them. Tests: `python3 tools/octopad_test/test_octopad.py` (needs `pip install lupa`) and `python3 tools/lint_lua50.py app/src/octo/assets/addons/OctoPad` (the client runs Lua 5.0).
 
+### No Man's Sky build (`nms` branch)
+
+`./gradlew assembleNmsModernRelease` builds **No Man's Sky** (`app.nomanssky`) for the **GOG** release, which is DRM-free; the Steam release needs the Steam client and isn't supported. It shares the Skyrim build's runtime and launcher; `GAME_PROFILE` (`GameProfile.kt`) picks what differs per game.
+
+- Copy the game folder (the one with `Binaries/NMS.exe` and `GAMEDATA/`) to `No Man's Sky/` on the device, or pick it with *Locate Game Files*.
+- `NMS.exe` is 64-bit x86 and runs through the same Proton ARM64EC + FEX setup as Skyrim. It renders with Vulkan, which Wine passes to Turnip directly, so DXVK isn't involved and the Turnip driver matters most for speed. The frame limit defaults to 30 FPS.
+- Settings: the game writes `Binaries/SETTINGS/TKGRAPHICSSETTINGS.MXML` on its first run. Before each launch the launcher sets the resolution, borderless mode and the game's frame cap in it. The first time it sees the file, it sets every quality category to Low. **Options** edits the quality categories the file has (Low/Medium/High/Ultra, with Battery saver and presets), resolution, frame limit, the FPS overlay and the Turnip driver.
+- Saves: the prefix's `AppData/Roaming/HelloGames/NMS` is linked to `Saves/` in the game folder (the old folder is kept as `NMS.old`). Before each launch, if anything changed, the whole folder is zipped into `SaveBackups/`, keeping 5. The saves carry no screenshot, so the Continue card shows the newest slot and when it was saved.
+- No quicksave on leaving (the game has no quicksave key), intro skip or SKSE.
+
 ### Skyrim SE build
 
 `./gradlew assembleSkyrimModernRelease` builds **Skyrim SE** (`app.skyrimse`) for *The Elder Scrolls V: Skyrim Special Edition* (including the Anniversary content) from **GOG**, which has no copy protection. The Steam release needs the Steam client running and isn't supported.

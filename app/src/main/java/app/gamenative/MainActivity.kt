@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import app.gamenative.BuildConfig
 import com.winlator.xserver.XKeycode
+import app.gamenative.ui.screen.wow.GameProfile
 import app.gamenative.ui.screen.wow.SkyrimGraphics
 import android.os.Looper
 import android.os.Handler
@@ -158,7 +159,8 @@ class MainActivity : ComponentActivity() {
      * background. The game is suspended a few seconds later, once the save has had time to finish.
      */
     private fun quicksaveBeforeSuspend(): Boolean {
-        if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT || PluviaApp.isBootingSplashShowing) return false
+        // No Man's Sky has no quicksave key; it saves at save points and on leaving the ship.
+        if (!GameProfile.isSkyrim || PluviaApp.isBootingSplashShowing) return false
         if (!SkyrimGraphics.launch(this).quicksaveOnLeave) return false
         val xServer = PluviaApp.xServerView?.getxServer() ?: return false
         xServer.injectKeyPress(XKeycode.KEY_F5)
