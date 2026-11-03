@@ -281,10 +281,14 @@ android {
                 srcDirs("src/modern/assets", "src/main/assets")
             }
         }
-        // No Man's Sky runs on the same x64 FEX build that the Skyrim flavor bundles.
+        // No Man's Sky runs on the same x64 FEX build that the Skyrim flavor bundles, and installs
+        // through the same innoextract.
         getByName("nms") {
             assets {
                 srcDirs("src/nms/assets", "src/skyrim/assets")
+            }
+            jniLibs {
+                srcDirs("src/nms/jniLibs", "src/skyrim/jniLibs")
             }
         }
     }

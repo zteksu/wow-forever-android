@@ -290,7 +290,7 @@ fun WoWForeverScreen(
     fun useGameFolder(path: String) {
         val root = GamePath.findGameRoot(File(path))
         if (root == null) {
-            errorMessage = "No $INSTALL_MARKER found in $path. Pick the folder that contains $INSTALL_MARKER and Data/."
+            errorMessage = "No $INSTALL_MARKER found in $path. Pick the folder that contains $INSTALL_MARKER and ${GameProfile.dataDir}/."
             return
         }
         errorMessage = null
