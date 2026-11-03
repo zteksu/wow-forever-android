@@ -192,6 +192,12 @@ A separate, small app (`app.azerothsurvivors`) for the fan-made web game at http
 - **Play** opens the game full screen in a WebView, loaded from the site, so it's always the current version. The game keeps its saves in the page's storage, which stays in this app until it's uninstalled. Links to other sites (Discord, the Windows download) open in the browser.
 - WebView has no Gamepad API, so `PadState` turns the controller's key and motion events into a "standard" layout gamepad. `navigator.getGamepads()` returns it through a script that runs before the page's own. The game's touch controls and keyboard work as they do in a browser.
 - Back asks before leaving the game. Music starts without a tap.
+- **Offline:** the page asks the site for its data one file at a time (`/data/<name>`, files from the game's MPQ archives), and the site only lets browsers keep them for a day. `OfflineData` answers the game's requests itself.
+  - Data files come from the app's permanent copy of anything the site sent, then from the Windows download's MPQ archives (read with StormLib, newest patch first), then from the site.
+  - The page's own files go to the site first, so updates arrive, and fall back to the saved copy offline. So after one online start the game runs offline.
+  - *Offline play* imports the Windows download's `.rar`, unpacked by bsdtar (libarchive) reading the picked file through the app's open file handle, so no storage permission is needed. It can also import the `.MPQ` files of an already unpacked copy.
+  - After importing, a few start-up files are compared with the site's. If they differ, the archives are only used when offline.
+  - `tools/azeroth/build_native.sh` builds `libazerothmpq.so` (StormLib + `mpq_jni.cpp`) and `libbsdtar.so`.
 
 ### Skyrim SE build
 

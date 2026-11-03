@@ -35,9 +35,10 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 
 /**
- * The game, full screen in a WebView. The page loads from the game's own site, so it's always the current
- * version; saves live in the WebView's storage for this app. Controller input goes to the page through
- * [PadState] because WebView has no Gamepad API.
+ * The game, full screen in a WebView. The page loads from the game's own site when there's a connection,
+ * so it's the current version, and from the app's saved copy when there isn't ([OfflineData]); saves live
+ * in the WebView's storage for this app. Controller input goes to the page through [PadState] because
+ * WebView has no Gamepad API.
  */
 class GameActivity : ComponentActivity() {
     private lateinit var web: WebView
@@ -81,7 +82,11 @@ class GameActivity : ComponentActivity() {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, PadState.BRIDGE_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
         }
+        val offline = OfflineData.get(this)
         web.webViewClient = object : WebViewClient() {
+            // Game files come from the app's own copy or the imported archives when it has them (see OfflineData).
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest) = offline.intercept(request)
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val url = request.url
                 if (url.host == BuildConfig.GAME_HOST) return false

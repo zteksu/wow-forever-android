@@ -50,6 +50,13 @@ android {
         }
     }
 
+    // libbsdtar.so is run as a program, so Android has to unpack it to the native library folder.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true

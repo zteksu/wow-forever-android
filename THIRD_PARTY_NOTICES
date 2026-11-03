@@ -488,3 +488,16 @@ offline installers. It links these libraries statically:
 - **zlib** from the Android NDK. zlib license.
 
 The full license texts are in each project's source at the versions above.
+
+---
+
+## StormLib and libarchive (Azeroth Survivors app)
+
+`azeroth/src/main/jniLibs/arm64-v8a/` holds two libraries built by `tools/azeroth/build_native.sh`, which lists the exact sources:
+
+- **StormLib** (https://github.com/ladislav-zezula/StormLib), commit 116135c, with its bundled zlib, bzip2,
+  libtomcrypt and libtommath, in `libazerothmpq.so`. Copyright (c) 1999-2013 Ladislav Zezula. MIT License.
+- **libarchive 3.7.7** (https://www.libarchive.org), as the `bsdtar` program in `libbsdtar.so`. Copyright (c)
+  2003-2018 Tim Kientzle and contributors. BSD 2-Clause License.
+
+The full license texts are in each project's source at the versions above.

@@ -4,6 +4,14 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -18,7 +26,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -96,7 +106,7 @@ private fun Launcher(webViewVersion: String?, onPlay: () -> Unit, onUpdateWebVie
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
         }
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -134,12 +144,14 @@ private fun Launcher(webViewVersion: String?, onPlay: () -> Unit, onUpdateWebVie
                 textAlign = TextAlign.Center,
             )
             Text(
-                "Plays online from wow.aethus.pl; saves stay in this app (uninstalling deletes them). Controller, touch or keyboard.",
+                "Plays from wow.aethus.pl, keeping a copy of what it loads; saves stay in this app (uninstalling deletes them). Controller, touch or keyboard.",
                 fontSize = 11.sp,
                 color = Muted,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 4.dp),
             )
+            Spacer(Modifier.height(12.dp))
+            OfflineCard()
             Row(horizontalArrangement = Arrangement.Center) {
                 if (!webViewOk) {
                     TextButton(onClick = onUpdateWebView) { Text("UPDATE WEBVIEW", color = Gold) }
@@ -148,6 +160,77 @@ private fun Launcher(webViewVersion: String?, onPlay: () -> Unit, onUpdateWebVie
                 TextButton(onClick = onDiscord) { Text("DISCORD", color = Gold) }
             }
             Text("Unofficial fan game; not affiliated with Blizzard Entertainment.", fontSize = 10.sp, color = Muted.copy(alpha = 0.7f))
+        }
+    }
+}
+
+
+private fun displayName(context: android.content.Context, uri: Uri): String =
+    context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+        if (c.moveToFirst()) c.getString(0) else null
+    } ?: uri.lastPathSegment.orEmpty()
+
+private fun gb(bytes: Long) = "%.1f GB".format(bytes / 1_073_741_824.0)
+
+/**
+ * Offline play: the game's data from its Windows download's MPQ archives, so nothing has to come from
+ * the site. Imports the .rar itself, or the .MPQ files of one unpacked with a file manager.
+ */
+@Composable
+private fun OfflineCard() {
+    val context = LocalContext.current
+    val offline = remember { OfflineData.get(context) }
+    val state by OfflineImport.state.collectAsState()
+    var refresh by remember { mutableIntStateOf(0) }
+    val ready = remember(refresh, state.running) { offline.archiveDir() != null }
+    val archiveSize = remember(refresh, state.running) { offline.archiveBytes() }
+    val savedSize = remember(refresh, state.running) { offline.savedBytes() }
+
+    val rarPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) OfflineImport.fromRar(context, offline, uri)
+    }
+    val mpqPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) OfflineImport.fromFiles(context, offline, uris.map { displayName(context, it) to it })
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxWidth(0.8f)
+            .background(Color(0xCC0F1722), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Text("OFFLINE PLAY", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = Gold)
+        Text(
+            when {
+                ready && !offline.matchesSite -> "Game data: ${gb(archiveSize)} from the Windows download (a different version from the site's; used when offline)."
+                ready -> "Game data: ${gb(archiveSize)} from the Windows download. Plays offline once it has started online once."
+                else -> "Import the Windows download (AzerothSurvivorsWindowsNew.rar from the site) to play without the internet."
+            },
+            fontSize = 11.sp,
+            color = Color(0xFFCBD5E1),
+            textAlign = TextAlign.Center,
+        )
+        if (savedSize > 0) Text("Saved from the site: ${gb(savedSize)}", fontSize = 10.sp, color = Muted)
+        if (state.running && state.progress >= 0f) {
+            LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), color = Gold)
+        }
+        (state.error ?: state.status.takeIf { it.isNotEmpty() })?.let {
+            Text(it, fontSize = 11.sp, color = if (state.error != null) Color(0xFFF87171) else Color.White, textAlign = TextAlign.Center)
+        }
+        Row(horizontalArrangement = Arrangement.Center) {
+            if (state.running) {
+                TextButton(onClick = { OfflineImport.cancel() }) { Text("CANCEL", color = Gold) }
+            } else {
+                TextButton(onClick = { rarPicker.launch(arrayOf("*/*")) }) { Text(if (ready) "RE-IMPORT .RAR" else "IMPORT .RAR", color = Gold) }
+                TextButton(onClick = { mpqPicker.launch(arrayOf("*/*")) }) { Text("IMPORT .MPQ FILES", color = Gold) }
+                if (ready) {
+                    TextButton(onClick = { OfflineImport.remove(offline); refresh++ }) { Text("REMOVE", color = Muted) }
+                }
+                if (savedSize > 0) {
+                    TextButton(onClick = { offline.clearSaved(); refresh++ }) { Text("CLEAR SAVED", color = Muted) }
+                }
+            }
         }
     }
 }
