@@ -469,3 +469,22 @@ The OctoWoW APK bundles the ShaguController World of Warcraft 1.12 addon
 
 MIT License, Copyright (c) 2022 Eric Mauser (Shagu). The full license text is
 in `app/src/octo/assets/addons/ShaguController/LICENSE`.
+
+---
+
+## innoextract and its libraries (Skyrim SE and No Man's Sky builds)
+
+`app/src/skyrim/jniLibs/arm64-v8a/libinnoextract.so` is innoextract, built for Android by
+`tools/innoextract/build.sh`, which lists the exact sources. The app runs it to unpack GOG
+offline installers. It links these libraries statically:
+
+- **innoextract** (https://constexpr.org/innoextract/), commit 6e9e34e.
+  Copyright (C) 2011-2020 Daniel Scharrer. zlib license.
+- **Boost 1.86.0** (iostreams, filesystem, date_time, system, program_options), https://www.boost.org.
+  Boost Software License 1.0.
+- **liblzma** from XZ Utils 5.6.3 (https://tukaani.org/xz/). BSD Zero Clause License (0BSD).
+- **bzip2 1.0.8** (https://sourceware.org/bzip2/). Copyright (C) 1996-2019 Julian R Seward.
+  BSD-style license; the full text is the LICENSE file in the bzip2-1.0.8 source.
+- **zlib** from the Android NDK. zlib license.
+
+The full license texts are in each project's source at the versions above.

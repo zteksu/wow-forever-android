@@ -58,6 +58,29 @@ object StorageUtils {
         }
     }
 
+    /**
+     * The file path behind a document picked with ACTION_OPEN_DOCUMENT, for the storage providers that
+     * expose one (internal storage, SD cards, Downloads' raw paths), or null otherwise.
+     */
+    fun getPathFromDocumentUri(context: Context, uri: Uri?): String? {
+        if (uri == null) return null
+        return try {
+            val docId = DocumentsContract.getDocumentId(uri)
+            when {
+                docId.startsWith("raw:") -> docId.removePrefix("raw:")
+                docId.startsWith("primary:") -> primaryStoragePath(docId)
+                docId.startsWith("/") -> docId
+                docId.contains(":") && uri.authority == "com.android.externalstorage.documents" -> {
+                    val (volumeId, subPath) = docId.split(":", limit = 2)
+                    joinPath(resolveVolumeRoot(context, volumeId), subPath)
+                }
+                else -> null
+            }?.takeIf { File(it).isFile }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun primaryStoragePath(docId: String) =
         joinPath(Environment.getExternalStorageDirectory().path, docId.substringAfter(":"))
 
