@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.FolderOpen
@@ -286,12 +287,11 @@ fun WoWForeverScreen(
         }
     }
 
-    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        val path = StorageUtils.getPathFromTreeUri(context, uri) ?: return@rememberLauncherForActivityResult
+    fun useGameFolder(path: String) {
         val root = GamePath.findGameRoot(File(path))
         if (root == null) {
             errorMessage = "No $INSTALL_MARKER found in $path. Pick the folder that contains $INSTALL_MARKER and Data/."
-            return@rememberLauncherForActivityResult
+            return
         }
         errorMessage = null
         gamePath = root.absolutePath
@@ -304,6 +304,13 @@ fun WoWForeverScreen(
             checkVersionStatus()
         }
     }
+
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        StorageUtils.getPathFromTreeUri(context, uri)?.let(::useGameFolder)
+    }
+    // Standalone GOG games can also be installed from GOG's offline installer.
+    val canInstallFromGog = remember { !BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT && GogInstaller.isAvailable(context) }
+    var showGogInstall by remember { mutableStateOf(false) }
 
     val filesMissing = !(files.dataExists && files.buildInfoExists)
     val canPlay = !isLaunching && !isUpdating && !filesMissing && !files.isWrongGame
@@ -601,6 +608,18 @@ fun WoWForeverScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Text("LOCATE GAME FILES", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WowGold)
                         }
+                        if (canInstallFromGog) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = { showGogInstall = true },
+                                modifier = Modifier.fillMaxWidth(0.85f).height(48.dp),
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(20.dp), tint = WowGold)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text("INSTALL FROM GOG INSTALLER", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WowGold)
+                            }
+                        }
                         Spacer(modifier = Modifier.height(10.dp))
                     }
 
@@ -694,6 +713,9 @@ fun WoWForeverScreen(
                                 }
                             }
                         }
+                        if (canInstallFromGog && !filesMissing) {
+                            LinkButton("Install", Icons.Default.Download) { showGogInstall = true }
+                        }
                         LinkButton("View Logs", Icons.Default.Description) { showLogsDialog = true }
                     }
                 }
@@ -745,6 +767,14 @@ fun WoWForeverScreen(
             store = saveStore,
             onDismiss = { showSavesDialog = false },
             onChanged = { savesVersion++ },
+        )
+    }
+
+    if (showGogInstall) {
+        GogInstallDialog(
+            marker = INSTALL_MARKER,
+            onInstalled = { useGameFolder(it.absolutePath) },
+            onDismiss = { showGogInstall = false },
         )
     }
 
