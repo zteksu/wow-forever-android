@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Draws a game flavor's launcher icon set into app/src/<flavor>/res.
 
-Usage: make_flavor_icon.py [retail|octo|skyrim] [font.ttf] [--emblem image.png]
+Usage: make_flavor_icon.py [retail|octo|skyrim|azeroth] [font.ttf] [--emblem image.png]
 
 Original artwork (no Blizzard or Bethesda assets): a gold-rimmed medallion with a
 monogram ("WoW", "SE") and a ribbon naming the flavor, in the same dark/gold palette
@@ -28,13 +28,15 @@ if "--emblem" in ARGS:
     del ARGS[i:i + 2]
 FLAVOR = ARGS[0] if len(ARGS) > 0 else "retail"
 FONT = ARGS[1] if len(ARGS) > 1 else "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
-RES = REPO / f"app/src/{FLAVOR}/res"
+# The Azeroth Survivors app is its own module.
+RES = REPO / ("azeroth/src/main/res" if FLAVOR == "azeroth" else f"app/src/{FLAVOR}/res")
 
 # Monogram, ribbon text and the medallion face colour, from centre (t=0) to rim (t=1).
 FLAVORS = {
     "retail": ("WoW", "RETAIL", lambda t: (40 - 32 * t, 150 - 115 * t, 215 - 140 * t)),  # sapphire
     "octo": ("WoW", "OCTO", lambda t: (34 - 26 * t, 168 - 120 * t, 138 - 96 * t)),  # teal
     "skyrim": ("SE", "SKYRIM", lambda t: (120 - 95 * t, 136 - 106 * t, 152 - 112 * t)),  # frost steel
+    "azeroth": ("AS", "SURVIVORS", lambda t: (150 - 110 * t, 40 - 30 * t, 46 - 34 * t)),  # crimson
 }
 MONOGRAM, RIBBON, FACE = FLAVORS[FLAVOR]
 BACKGROUND = (0x0A, 0x0E, 0x17)
@@ -239,7 +241,7 @@ def main():
     (RES / "drawable").mkdir(parents=True, exist_ok=True)
     banner.save(RES / "drawable/ic_banner.png", optimize=True)
 
-    full.resize((512, 512), Image.LANCZOS).save(REPO / f"app/src/{FLAVOR}/ic_launcher-playstore.png", optimize=True)
+    full.resize((512, 512), Image.LANCZOS).save(RES.parent / "ic_launcher-playstore.png", optimize=True)
 
 
 if __name__ == "__main__":

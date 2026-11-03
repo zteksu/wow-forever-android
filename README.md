@@ -184,6 +184,15 @@ Classes with stances, forms or auras get a flyout on D-pad left, hunters and war
 
 The addon tells the app when a menu wants the pointer through VanillaHelpers' `WriteFile` (`VanillaHelpersData/OctoPad.txt`); the app adds `VanillaHelpers.dll` to `dlls.txt` if it's missing. Without it, the camera starts in pointer mode for the login screens and Select switches modes by hand. Targeting uses UnitXP_SP3's facing- and distance-aware functions when the client has them. Tests: `python3 tools/octopad_test/test_octopad.py` (needs `pip install lupa`) and `python3 tools/lint_lua50.py app/src/octo/assets/addons/OctoPad` (the client runs Lua 5.0).
 
+### Azeroth Survivors (`azeroth-survivors` branch, `azeroth/` module)
+
+A separate, small app (`app.azerothsurvivors`) for the fan-made web game at https://wow.aethus.pl. The game is a WebAssembly client drawing with WebGPU, so it runs natively in Android's WebView, with no Wine or emulation. Build it with `./gradlew :azeroth:assembleRelease`.
+
+- The launcher checks the Android System WebView version (WebGPU needs 121+ on Android 12+) and links to its Play Store page if it's older.
+- **Play** opens the game full screen in a WebView, loaded from the site, so it's always the current version. The game keeps its saves in the page's storage, which stays in this app until it's uninstalled. Links to other sites (Discord, the Windows download) open in the browser.
+- WebView has no Gamepad API, so `PadState` turns the controller's key and motion events into a "standard" layout gamepad. `navigator.getGamepads()` returns it through a script that runs before the page's own. The game's touch controls and keyboard work as they do in a browser.
+- Back asks before leaving the game. Music starts without a tap.
+
 ### Skyrim SE build
 
 `./gradlew assembleSkyrimModernRelease` builds **Skyrim SE** (`app.skyrimse`) for *The Elder Scrolls V: Skyrim Special Edition* (including the Anniversary content) from **GOG**, which has no copy protection. The Steam release needs the Steam client running and isn't supported.
