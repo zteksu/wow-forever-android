@@ -1205,7 +1205,9 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String,
         // Skyrim's music and voices are xWMA. Wine's XAudio2 decodes those through its WMA decoder and Proton's
         // media converter, which fails without its pre-converted database and plays silence. Microsoft's XAudio2
         // decodes xWMA itself. (Microsoft's WMA decoder under Wine's XAudio2 crashes in Wine's mfplat instead.)
-        val xaudio = if (GameProfile.isSkyrim) ",xaudio=1" else ""
+        // No Man's Sky's music and voices go silent under Wine's XAudio2 too; Microsoft's is the usual Proton fix
+        // for that (xaudio2_7=native).
+        val xaudio = if (GameProfile.isPlainGame) ",xaudio=1" else ""
         put("wincomponents", "direct3d=0,directsound=0,directinput8=0,directinput=0,directmusic=0,directshow=0,directplay=0,vcrun2010=0,wmdecoder=0,opengl=0$xaudio")
     }
 }
