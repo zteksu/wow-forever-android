@@ -112,6 +112,9 @@ object OfflineImport {
         _state.value = State(status = "Removed the game data. The game will download what it needs again.")
     }
 
+    /** After a game update: compares the archives with the new version's files again. */
+    fun recheck(offline: OfflineData) = run("Checking the game data against the new version...") { check(offline) }
+
     fun cancel() {
         process?.destroy()
     }

@@ -92,7 +92,34 @@ class OfflineData private constructor(context: Context) {
         return null
     }
 
-    private fun page(url: Uri, path: String): WebResourceResponse? = fetch(url, keyFor(url)) ?: load(keyFor(url))
+    private fun page(url: Uri, path: String): WebResourceResponse? {
+        val key = keyFor(url)
+        val fetched = fetchRaw(url) ?: return load(key)
+        if (fetched.code == 200) {
+            save(key, fetched.type, fetched.bytes)
+            if (isDocument(path)) buildStamp(String(fetched.bytes))?.let { onBuild(it, key, fetched) }
+        }
+        return fetched.toResponse()
+    }
+
+    /**
+     * The page names its scripts with a build stamp (`rogue.js?v=<stamp>`) that changes with each release.
+     * When it changes, the saved copies are from the old version: they're dropped so the new files are
+     * fetched, and the imported archives are checked against the site again (used only offline until then).
+     */
+    @Synchronized
+    private fun onBuild(stamp: String, documentKey: String, document: Fetched) {
+        val last = prefs.getString(KEY_BUILD, null)
+        prefs.edit().putString(KEY_BUILD, stamp).apply()
+        if (last == null || last == stamp) return
+        Log.i(TAG, "New game version $stamp (was $last): dropping saved files")
+        clearSaved()
+        save(documentKey, document.type, document.bytes)
+        if (archiveDir() != null) {
+            matchesSite = false
+            OfflineImport.recheck(this)
+        }
+    }
 
     private fun fromArchives(name: String): WebResourceResponse? {
         val bytes = archives()?.read(name) ?: return null
@@ -107,8 +134,19 @@ class OfflineData private constructor(context: Context) {
         return response(type, body.readBytes())
     }
 
+    private class Fetched(val code: Int, val reason: String, val type: String, val bytes: ByteArray)
+
+    private fun Fetched.toResponse() = response(type, bytes, code, reason)
+
     /** Fetches from the site and saves a successful answer; other answers (like "too busy") pass through. */
     private fun fetch(url: Uri, key: String): WebResourceResponse? {
+        val fetched = fetchRaw(url) ?: return null
+        if (fetched.code == 200) save(key, fetched.type, fetched.bytes)
+        return fetched.toResponse()
+    }
+
+    /** The site's answer, or null with no connection (the caller then tries the saved copy or the archives). */
+    private fun fetchRaw(url: Uri): Fetched? {
         val connection = (URL(url.toString()).openConnection() as HttpURLConnection).apply {
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
@@ -116,15 +154,10 @@ class OfflineData private constructor(context: Context) {
         return try {
             val code = connection.responseCode
             val type = connection.contentType?.substringBefore(';')?.trim()?.ifEmpty { null } ?: mimeFor(url.path.orEmpty())
-            if (code != 200) {
-                val body = connection.errorStream?.use { it.readBytes() } ?: ByteArray(0)
-                return response(type, body, code, connection.responseMessage ?: "Error")
-            }
-            val bytes = connection.inputStream.use { it.readBytes() }
-            save(key, type, bytes)
-            response(type, bytes)
+            val stream = if (code == 200) connection.inputStream else connection.errorStream
+            Fetched(code, connection.responseMessage ?: if (code == 200) "OK" else "Error", type, stream?.use { it.readBytes() } ?: ByteArray(0))
         } catch (e: IOException) {
-            null // offline: the caller tries the saved copy or the archives
+            null
         } finally {
             connection.disconnect()
         }
@@ -149,6 +182,13 @@ class OfflineData private constructor(context: Context) {
         private const val TAG = "AzerothOffline"
         private const val DATA = "/data/"
         private const val KEY_MATCHES = "matches_site"
+        private const val KEY_BUILD = "build"
+        private val STAMP = Regex("""[?&]v=([0-9A-Za-z_-]{6,})""")
+
+        internal fun isDocument(path: String) = path == "/" || path.isEmpty() || path.endsWith(".html")
+
+        /** The build stamp in the page's script and style links, or null if it has none. */
+        internal fun buildStamp(html: String): String? = STAMP.find(html)?.groupValues?.get(1)
         private const val CONNECT_TIMEOUT_MS = 6_000
         private const val READ_TIMEOUT_MS = 60_000
         private val HEADERS = mapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "no-store")

@@ -197,6 +197,7 @@ A separate, small app (`app.azerothsurvivors`) for the fan-made web game at http
   - The page's own files go to the site first, so updates arrive, and fall back to the saved copy offline. So after one online start the game runs offline.
   - *Offline play* imports the Windows download's `.rar`, unpacked by bsdtar (libarchive) reading the picked file through the app's open file handle, so no storage permission is needed. It can also import the `.MPQ` files of an already unpacked copy.
   - After importing, a few start-up files are compared with the site's. If they differ, the archives are only used when offline.
+  - Updates: the page links its scripts with a build stamp (`rogue.js?v=<stamp>`). When an online launch finds a new stamp, the saved copies are dropped so the new version's files are fetched. The archives are then compared with the site again, and only used offline until they match.
   - `tools/azeroth/build_native.sh` builds `libazerothmpq.so` (StormLib + `mpq_jni.cpp`) and `libbsdtar.so`.
 
 ### Skyrim SE build

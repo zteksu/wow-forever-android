@@ -56,4 +56,13 @@ class OfflineTest {
         assertNotEquals(a, OfflineData.keyFor("/rogue.js", "v=2"))
         assertEquals(40, a.length)
     }
+
+    @Test
+    fun theBuildStampComesFromThePagesScriptLinks() {
+        val html = """<link rel="stylesheet" href="./rogue.css?v=7960c92a7f17"><script type="module" src="./rogue.js?v=7960c92a7f17"></script>"""
+        assertEquals("7960c92a7f17", OfflineData.buildStamp(html))
+        assertNull(OfflineData.buildStamp("<html><body>No stamps here</body></html>"))
+        assertTrue(OfflineData.isDocument("/"))
+        assertTrue(!OfflineData.isDocument("/rogue.js"))
+    }
 }
