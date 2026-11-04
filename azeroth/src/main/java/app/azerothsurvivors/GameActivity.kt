@@ -6,10 +6,7 @@ import android.content.Intent
 import android.graphics.drawable.GradientDrawable
 import android.view.inputmethod.InputMethodManager
 import androidx.core.view.ViewCompat
-import android.content.ContentValues
 import android.net.Uri
-import android.os.Environment
-import android.provider.MediaStore
 import android.util.Base64
 import android.webkit.ValueCallback
 import android.widget.Toast
@@ -67,24 +64,12 @@ class GameActivity : ComponentActivity() {
     private inner class SaveFiles {
         @JavascriptInterface
         fun save(name: String, base64: String) {
-            val result = runCatching { writeDownload(name, Base64.decode(base64, Base64.DEFAULT)) }
+            val result = runCatching { DownloadsFolder.write(this@GameActivity, name, Base64.decode(base64, Base64.DEFAULT)) }
             runOnUiThread {
-                val text = result.fold({ "Saved to Download/$SAVE_FOLDER/$it" }, { "Couldn't save the file: ${it.message}" })
+                val text = result.fold({ "Saved to Download/${DownloadsFolder.NAME}/$it" }, { "Couldn't save the file: ${it.message}" })
                 Toast.makeText(this@GameActivity, text, Toast.LENGTH_LONG).show()
             }
         }
-    }
-
-    private fun writeDownload(name: String, bytes: ByteArray): String {
-        val safe = name.replace(Regex("""[\\/:*?"<>|]"""), "_").ifBlank { "AzerothSurvivors.sav" }
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, safe)
-            put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
-            put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$SAVE_FOLDER")
-        }
-        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: error("no Downloads folder")
-        contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("can't write")
-        return safe
     }
 
     /**
@@ -155,6 +140,7 @@ class GameActivity : ComponentActivity() {
             WebViewCompat.addDocumentStartJavaScript(web, PadState.BRIDGE_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
             WebViewCompat.addDocumentStartJavaScript(web, SAVE_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
             WebViewCompat.addDocumentStartJavaScript(web, KEYBOARD_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
+            WebViewCompat.addDocumentStartJavaScript(web, COMPAT_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
         }
         val offline = OfflineData.get(this)
         web.webViewClient = object : WebViewClient() {
@@ -174,6 +160,7 @@ class GameActivity : ComponentActivity() {
                     view.evaluateJavascript(PadState.BRIDGE_SCRIPT, null)
                     view.evaluateJavascript(SAVE_SCRIPT, null)
                     view.evaluateJavascript(KEYBOARD_SCRIPT, null)
+                    view.evaluateJavascript(COMPAT_SCRIPT, null)
                 }
             }
 
@@ -348,8 +335,6 @@ class GameActivity : ComponentActivity() {
     }
 
     companion object {
-        private const val SAVE_FOLDER = "Azeroth Survivors"
-
         /**
          * Runs before the page's scripts. A link that downloads a blob (how the page hands over its .sav
          * file) can't be fetched from outside the page, so its bytes go to [SaveFiles] instead.
@@ -370,6 +355,28 @@ class GameActivity : ComponentActivity() {
       return;
     }
     return click.call(this);
+  };
+})();
+"""
+
+        /**
+         * Runs before the page's scripts. The game asks for a normal WebGPU adapter and stops with a "no usable
+         * graphics card" message when there is none. Some GPUs only get WebGPU's reduced compatibility mode, so
+         * when the normal request comes back empty, ask again for that one. (Experimental: the game may still
+         * need more than that mode offers.)
+         */
+        private const val COMPAT_SCRIPT = """
+(() => {
+  if (!navigator.gpu || !navigator.gpu.requestAdapter) return;
+  const original = navigator.gpu.requestAdapter.bind(navigator.gpu);
+  navigator.gpu.requestAdapter = async function (options) {
+    const adapter = await original(options);
+    if (adapter) return adapter;
+    try {
+      const compat = await original(Object.assign({}, options, { featureLevel: 'compatibility' }));
+      if (compat) { console.warn('WebGPU: no normal adapter; using compatibility mode'); return compat; }
+    } catch (e) {}
+    return null;
   };
 })();
 """
