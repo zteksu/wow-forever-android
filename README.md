@@ -225,6 +225,8 @@ Each app has its own branch and release series:
 | `retail` | WoW Retail | `retail-v<version>` | `WoW-Retail.apk` |
 | `octowow` | OctoWoW | `octowow-v<version>` | `OctoWoW.apk` |
 | `skyrim` | Skyrim SE | `skyrim-v<version>` | `Skyrim-SE.apk` |
+| `nms` | No Man's Sky | `nms-v<version>` | `No-Mans-Sky.apk` |
+| `azeroth-survivors` | Azeroth Survivors | `azeroth-v<version>` | `Azeroth-Survivors.apk` |
 
 `.github/workflows/release-apk.yml` publishes them: a push to one of those branches that changes `versionName` builds that app and creates its release. Each app's updater picks the newest release carrying its own APK, so the three release independently. Add the `ANDROID_KEYSTORE_*` repository secrets described in the workflow so every release is signed with the same key; otherwise each run signs with a new debug key and installed apps can't update to it.
 
