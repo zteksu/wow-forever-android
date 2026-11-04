@@ -80,4 +80,5 @@ dependencies {
     implementation("androidx.webkit:webkit:1.12.1")
     implementation(libs.kotlin.coroutines)
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
 }

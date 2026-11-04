@@ -36,6 +36,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +71,7 @@ class LauncherActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Launcher(
+                    activity = this,
                     webViewVersion = webView?.versionName,
                     onPlay = { GameActivity.open(this) },
                     onUpdateWebView = { openStore(webView?.packageName ?: "com.google.android.webview") },
@@ -90,11 +93,15 @@ class LauncherActivity : ComponentActivity() {
 
 @SuppressLint("DiscouragedApi")
 @Composable
-private fun Launcher(webViewVersion: String?, onPlay: () -> Unit, onUpdateWebView: () -> Unit, onDiscord: () -> Unit) {
+private fun Launcher(activity: ComponentActivity, webViewVersion: String?, onPlay: () -> Unit, onUpdateWebView: () -> Unit, onDiscord: () -> Unit) {
     val context = LocalContext.current
     val backdrop = remember { context.resources.getIdentifier("game_backdrop", "drawable", context.packageName) }
     val major = webViewMajor(webViewVersion)
     val webViewOk = major != null && major >= MIN_WEBVIEW_MAJOR
+    // The version number only says WebGPU exists in this WebView; the probe asks whether it gives this phone's GPU an adapter.
+    var gpu by remember { mutableStateOf<WebGpuStatus?>(null) }
+    var gpuSaved by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { WebGpuProbe.run(activity) { gpu = it } }
 
     Box(
         modifier = Modifier
@@ -133,16 +140,27 @@ private fun Launcher(webViewVersion: String?, onPlay: () -> Unit, onUpdateWebVie
                 Text("PLAY", fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 2.sp)
             }
             Spacer(Modifier.height(14.dp))
+            val gpuStatus = gpu
             Text(
                 when {
-                    webViewOk -> "Android System WebView $webViewVersion · WebGPU supported"
                     webViewVersion == null -> "Android System WebView not found: the game needs it."
-                    else -> "Android System WebView $webViewVersion is too old for WebGPU; update it to $MIN_WEBVIEW_MAJOR or newer."
+                    !webViewOk -> "Android System WebView $webViewVersion is too old for WebGPU; update it to $MIN_WEBVIEW_MAJOR or newer."
+                    gpuStatus == null -> "Android System WebView $webViewVersion · checking WebGPU..."
+                    else -> "Android System WebView $webViewVersion · ${gpuStatus.summary()}"
                 },
                 fontSize = 11.sp,
-                color = if (webViewOk) Muted else Color(0xFFF87171),
+                color = if (webViewOk && (gpuStatus == null || gpuStatus.usable)) Muted else Color(0xFFF87171),
                 textAlign = TextAlign.Center,
             )
+            gpuStatus?.takeIf { !it.usable }?.let { status ->
+                TextButton(onClick = {
+                    gpuSaved = runCatching {
+                        "Saved Download/${DownloadsFolder.NAME}/" +
+                            DownloadsFolder.write(activity, "WebGPU check.txt", status.report().toByteArray(), "text/plain")
+                    }.getOrElse { "Couldn't save: ${it.message}" }
+                }) { Text("SAVE WEBGPU DETAILS", color = Gold) }
+                gpuSaved?.let { Text(it, fontSize = 10.sp, color = Muted, textAlign = TextAlign.Center) }
+            }
             Text(
                 "Plays from wow.aethus.pl, keeping a copy of what it loads; saves stay in this app (uninstalling deletes them). Controller, touch or keyboard.",
                 fontSize = 11.sp,
