@@ -25,6 +25,9 @@ import android.view.InputDevice
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import app.gamenative.BuildConfig
+import app.gamenative.ui.screen.wow.GamePath
+import app.gamenative.ui.screen.wow.MpqClient
+import app.gamenative.ui.screen.wow.OctoPadBridge
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -226,8 +229,8 @@ private const val EXIT_PROCESS_RESPONSE_TIMEOUT_MS = 2_000L
 private const val QUICK_MENU_PROCESS_POLL_INTERVAL_MS = 2_000L
 private const val DEFAULT_FPS_LIMITER_MAX_HZ = 60
 private const val DEFAULT_FPS_LIMITER_TARGET_HZ = 60
-private const val FPS_LIMITER_ENABLED_EXTRA = "fpsLimiterEnabled"
-private const val FPS_LIMITER_TARGET_EXTRA = "fpsLimiterTarget"
+internal const val FPS_LIMITER_ENABLED_EXTRA = "fpsLimiterEnabled"
+internal const val FPS_LIMITER_TARGET_EXTRA = "fpsLimiterTarget"
 
 private fun initialFpsLimiterEnabled(container: Container): Boolean =
     parseBooleanExtra(container.getExtra(FPS_LIMITER_ENABLED_EXTRA)) ?: true
@@ -511,6 +514,7 @@ fun XServerScreen(
 
     var win32AppWorkarounds: Win32AppWorkarounds? by remember { mutableStateOf(null) }
     var physicalControllerHandler: PhysicalControllerHandler? by remember { mutableStateOf(null) }
+    var octoPadBridge: OctoPadBridge? by remember { mutableStateOf(null) }
     var exitWatchJob: Job? by remember { mutableStateOf(null) }
     val keyboardEscMenuHandler = remember(scope) { KeyboardEscMenuHandler(scope) }
 
@@ -518,6 +522,8 @@ fun XServerScreen(
         onDispose {
             PluviaApp.radialMenuCoordinator?.detach()
             PluviaApp.radialMenuCoordinator = null
+            octoPadBridge?.stop()
+            octoPadBridge = null
             physicalControllerHandler?.cleanup()
             physicalControllerHandler = null
             exitWatchJob?.cancel()
@@ -2377,6 +2383,14 @@ fun XServerScreen(
                         },
                     )
                     radialMenuCoordinator?.bindPhysicalControllerHandler(physicalControllerHandler)
+                    octoPadBridge?.stop()
+                    octoPadBridge = physicalControllerHandler?.camera
+                        ?.takeIf { BuildConfig.MPQ_CLIENT && MpqClient.controllerLayout(context) == MpqClient.ControllerLayout.OCTOPAD }
+                        ?.let { camera ->
+                            OctoPadBridge(OctoPadBridge.stateFile(File(GamePath.load(context))), camera) {
+                                PluviaApp.inputControlsView?.triggerShowKeyboard()
+                            }.apply { start() }
+                        }
 
                     // Store profile for auto-show logic
                     loadedProfile = targetProfile
@@ -3596,19 +3610,26 @@ private fun setupXEnvironment(
     val enableWineDebug = PrefManager.enableWineDebug
     val enableBox86Logs = WinlatorPrefManager.getBoolean("enable_box86_64_logs", false)
     val wineDebugChannels = PrefManager.wineDebugChannels
-    // The x86 MPQ client (OctoWoW) is the least proven path and has no debug settings screen, so it always
-    // writes Wine's errors to Download/, where players can open and share it without a PC.
-    val launchLog = BuildConfig.MPQ_CLIENT
+    // Emulated x86 games (OctoWoW, Skyrim) are the least proven path and have no debug settings screen, so
+    // they always write Wine's errors to Download/, where players can open and share them without a PC.
+    val launchLog = !BuildConfig.BLIZZARD_CLIENT
     // explicitly enable or disable Wine debug channels
     envVars.put(
         "WINEDEBUG",
         if (enableWineDebug && wineDebugChannels.isNotEmpty())
             "+" + wineDebugChannels.replace(",", ",+")
         else if (launchLog)
-            "fixme-all"
+            // Which processes start, which DLLs load and any crash, so a silent exit can be traced. Exceptions
+            // are warnings; +seh's traces would log every exception FEX handles, thousands a second.
+            "fixme-all,+process,+loaddll,warn+seh,warn+module"
         else
             "-all",
     )
+    if (BuildConfig.MPQ_CLIENT) {
+        // wowbox64, which runs the 32-bit client, logs its own startup and crashes with these.
+        envVars.put("BOX64_LOG", "1")
+        envVars.put("BOX64_SHOWSEGV", "1")
+    }
     // capture debug output to file if either Wine or Box86/64 logging is enabled
     var logFile: File? = null
     val captureLogs = enableWineDebug || enableBox86Logs || launchLog
@@ -3624,7 +3645,9 @@ private fun setupXEnvironment(
     }
 
     ProcessHelper.addDebugCallback { line ->
-        if (captureLogs) {
+        // The launch log skips the per-file path-redirect and controller-shim chatter, which otherwise
+        // buries Wine's errors under thousands of lines.
+        if (captureLogs && !(launchLog && LAUNCH_LOG_NOISE.any { line.startsWith(it) })) {
             logFile?.appendText(line + "\n")
         }
     }
@@ -3669,7 +3692,9 @@ private fun setupXEnvironment(
         guestProgramLauncherComponent.setSteamType(container.getSteamType())
 
         envVars.putAll(container.envVars)
-        envVars.remove("DXVK_FRAME_RATE")
+        // The app's frame limiter replaces DXVK's, except for the x64 games, where DXVK's cap also paces
+        // the game's own frames (the launcher sets both to the same limit).
+        if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) envVars.remove("DXVK_FRAME_RATE")
         envVars.remove("VKD3D_FRAME_RATE")
         if (!envVars.has("WINEESYNC")) envVars.put("WINEESYNC", "1")
 
@@ -3884,12 +3909,9 @@ private fun getWineStartCommand(
                 guestProgramLauncherComponent.workingDir = hostDir
             }
         }
-        val isArm64 = executablePath.contains("ARM64", ignoreCase = true)
-        if (isArm64) {
-            if (executablePath.contains(" ")) "\"$executablePath\"" else executablePath
-        } else {
-            "winhandler.exe \"$executablePath\""
-        }
+        // Quote only when needed: started without winhandler.exe, the quotes reach explorer.exe escaped
+        // (\"G:\WoW.exe\") and it can't find the program.
+        if (!executablePath.contains(" ")) executablePath else "\"$executablePath\""
     } else {
         if (gameFolderPath == null) {
             Timber.tag("XServerScreen").e("Could not find A: drive: $appId")
@@ -3904,8 +3926,12 @@ private fun getWineStartCommand(
         "\"A:\\${normalizedPath}\""
     }
 
-    return if (args.contains("ARM64", ignoreCase = true)) args else "winhandler.exe $args"
+    // ARM64 programs (the WoW clients) start directly, and so do the other games: winhandler.exe is x86-64
+    // and needs FEX, which only the x64 flavors ship, and they don't need it either.
+    return if (!BuildConfig.BLIZZARD_CLIENT || args.contains("ARM64", ignoreCase = true)) args else "winhandler.exe $args"
 }
+private val LAUNCH_LOG_NOISE = listOf("I replace:", "evshim:")
+
 private fun exit(
     winHandler: WinHandler?,
     frameRating: FrameRating?,

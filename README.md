@@ -113,6 +113,12 @@ The `_classic_beta_/` folder can be deleted afterwards.
 
 ---
 
+### Add-ons (WoW Forever and Retail)
+
+**Add-ons** on the main screen lists popular add-ons that publish GitHub releases with the BigWigs packager's `release.json` (Questie, RestedXP, Guidelime, DBM, BigWigs, Plater, Bartender4, Dominos, MoveAny and more). Only those with a zip built for your game are shown (flavor `forever`, or `mainline` for Retail). Install, update and remove put them in `_forever_/Interface/AddOns` (or `_retail_`). *Add from GitHub* takes any other `owner/repository` that publishes the same way.
+
+**CurseForge:** paste your own API key from [CurseForge for Studios](https://console.curseforge.com) (API keys) into the Add-ons screen. The list then also shows CurseForge's most popular add-ons for your game, and the search box searches all of them; installs pull in required dependencies. The key stays on the device and is only sent to `api.curseforge.com`. Some authors turn off downloads through apps; those show their CurseForge page instead.
+
 ## Building from source
 
 Requirements: JDK 17 and the Android SDK (with build-tools and platform-tools).
@@ -148,6 +154,58 @@ Release builds are signed with `app/keystores/keystore.properties` when it exist
 - Expects the OctoWoW client folder as-is (`WoW.exe`, `Data/`, `realmlist.wtf`, `WTF/`) in `OctoWoW/` on the device. There is no `.build.info`, Blizzard updater or Battle.net login.
 - Runs the 32-bit x86 client through the bundled wowbox64 emulator. It launches `VanillaFixes.exe` when present, so the client mods in `dlls.txt` load, and `WoW.exe` otherwise. Rendering uses the DXVK `d3d9.dll` and `dxvk.conf` shipped in the client folder.
 - Installs the [ShaguController](https://github.com/shagu/ShaguController) addon into `Interface/AddOns/` and maps the controller to the keys it expects: left stick moves, right stick moves the mouse, L2/R2 are right/left click, A jumps, Y/X/B and the D-pad are action buttons, L1/R1 cycle targets, Select opens the map, Start is Escape, L3 opens bags and R3 the quest log.
+- **Game updates:** checks OctoWoW's client torrent (`dl.octowow.st/download/client.torrent`) on launch, the same manifest its own launcher uses. **Update** downloads only the changed files over HTTPS from the torrent's web mirror and verifies them against the torrent's SHA-1 piece hashes. The last applied torrent is kept in `.octowow-android/` in the client folder. **Verify Game Files** re-checks every file and repairs any that don't match.
+- **Add-ons:** browses OctoWoW's addon catalog (`octowow.st/api/addons.json`, the list its launcher offers) with search, and installs, updates or removes addons in `Interface/AddOns/`, along with any catalog addons they require.
+- **Controller layout** (in Add-ons): ShaguController, [ConsoleExperience Classic](https://github.com/pepordev/ConsoleExperienceClassic), a ConsolePort-style UI for 1.12 (face buttons, D-pad and bumpers are keys 1-0, LT/RT are held Shift/Ctrl for three more bars, Start is Shift+Escape for its radial menu, Select opens the map), or **Forever Gamepad** (below). The unused ones are parked in `Interface/AddOns-disabled/`.
+
+#### Forever Gamepad (OctoPad)
+
+The bundled OctoPad addon (`app/src/octo/assets/addons/OctoPad`) recreates WoW Forever's Gamepad (Alpha) controls on the 1.12 client. It is original code: Forever's own UI is built on engine gamepad support (`C_GamePad`, Edit Mode) that 1.12 doesn't have, so the controller profile sends each button as its own key (F1-F12, numpad `/ * -`) and the addon works out layers, modifiers and menus. The sticks are handled by the app.
+
+| Input | Action |
+| :--- | :--- |
+| Left stick | Move: forward/back and strafe, in the direction the camera faces |
+| Right stick | Turn the camera and your character with it (a right-button drag); drives the pointer while a menu is open |
+| A / X / Y / B | Jump / interact (right-clicks the reticle: talk, loot, attack what's in front) / unit menu / cancel or clear target |
+| LT, RT, LT+RT + D-pad or face button | Three layers of 8 actions; D-pad alone is 4 more, shared by every arrangement |
+| LB+RB + D-pad left/right | Switch between three bar arrangements |
+| RB tap / LB tap | Target the enemy ahead (again: next enemy) / a friend |
+| Hold RB + button | Hostile targeting: D-pad left/right cycle enemies, up nearest, down last; A attack, X next marked, Y mark, B clear |
+| Hold LB + button | Friendly targeting: A self, X pet, B assist, Y mark; D-pad moves through the group frames (Fixed Party Targeting: one D-pad direction per party member) |
+| LB+RB + B / X / Y / up / down | Bags / sheathe / buff viewer / quest log / chat with the on-screen keyboard |
+| LB+RB + right stick / L3 / hold R3 | Zoom / recenter the camera / look behind |
+| L3 / R3 | Auto-run / ping your position |
+| Start | Radial menu: character, spellbook, talents, professions, bags, quests, map, chat, game menu; LB/RB switch to the social and system tabs; D-pad up opens emotes, down sits |
+| Select | Pointer mode (like Forever's touchpad): the right stick moves the mouse, A and B click |
+
+With a window open (vendor, quest, bags, spellbook, loot, popups, ...), the D-pad moves a highlight, A clicks, X is the secondary action (use or equip an item, buy or sell, bind a spell), Y opens a context menu (bind, split, destroy, share or abandon a quest), B goes back, LT/RT switch windows and the bumpers switch tabs. Bind spells and items to the bar as in Forever: X on a spell in the spellbook (or Y, *Bind to Action Bar* on an item), then press the button combination. Ground-targeted spells switch to pointer mode with A to place them and B to cancel.
+
+Classes with stances, forms or auras get a flyout on D-pad left, hunters and warlocks pet control and pet spell flyouts on D-pad down and right; open one and pick with the button shown under each choice. `/octopad` (or *Gamepad Options* in the radial menu) has Forever's options (Compact Action Bar, Fixed Party Targeting, Swap Target Modifier Sides, Swap Friendly/Hostile Target Action Sides) plus camera speed, bar size, placing flyouts, clearing a slot and moving the bar.
+
+The addon tells the app when a menu wants the pointer through VanillaHelpers' `WriteFile` (`VanillaHelpersData/OctoPad.txt`); the app adds `VanillaHelpers.dll` to `dlls.txt` if it's missing. Without it, the camera starts in pointer mode for the login screens and Select switches modes by hand. Targeting uses UnitXP_SP3's facing- and distance-aware functions when the client has them. Tests: `python3 tools/octopad_test/test_octopad.py` (needs `pip install lupa`) and `python3 tools/lint_lua50.py app/src/octo/assets/addons/OctoPad` (the client runs Lua 5.0).
+
+### Skyrim SE build
+
+`./gradlew assembleSkyrimModernRelease` builds **Skyrim SE** (`app.skyrimse`) for *The Elder Scrolls V: Skyrim Special Edition* (including the Anniversary content) from **GOG**, which has no copy protection. The Steam release needs the Steam client running and isn't supported.
+
+- Copy the game folder (the one with `SkyrimSE.exe` and `Data/`) to `Skyrim Special Edition/` on the device, or pick it with *Locate Game Files*. There's no updater, login or add-on catalog.
+- Or install it from GOG's **offline installer**: *Install from GOG installer* takes `setup_….exe` (with its `.bin` parts in the same folder) and a folder to install to. It unpacks it on the device with innoextract (`libinnoextract.so`, built by `tools/innoextract/build.sh`), without running the Windows installer. It skips the installer's redistributables and temporary files, moves the folder holding the game's exe into place, and makes it the game folder. It needs free space of about 1.15× the installer's size, and can delete the installer files afterwards.
+- `SkyrimSE.exe` is 64-bit x86. It runs under the same ARM64EC Proton through FEX (`libarm64ecfex.dll`, the `fexcore-2605` build bundled in `app/src/skyrim/assets/fexcore/`), which the prefix already registers for x86-64 code. DirectX 11 goes through x86-64 DXVK 2.6.1-gplasync, fetched from GameNative's component server on the first launch. It compiles shaders in the background, and frames are capped at 60 because Skyrim's physics break above that (the Odin 3 screen runs at 120 Hz). FEX uses its intermediate preset, which keeps x86 memory ordering for Skyrim's threads.
+- Settings live in the prefix's `Documents/My Games/Skyrim Special Edition GOG/SkyrimPrefs.ini`. The launcher's **Options** button works like the Options window of Skyrim's own launcher. It has:
+  - Low/Medium/High/Ultra presets;
+  - antialiasing, anisotropic filtering, textures, shadows, decals, grass, particles, effects and view distances;
+  - resolution (540p–1080p, which also sets the emulated screen size) and a 30/40/60 FPS limit (DXVK's frame cap).
+  Quality options are read from and written to `SkyrimPrefs.ini`. Options saved before the first launch are kept in the app until the prefix exists.
+- Performance: under emulation Skyrim is held back by the CPU, mostly by draw calls. So the first launch, and existing installs once (`SkyrimConfig.PERFORMANCE_VERSION`), get the Medium preset. It turns down shadows on land, trees and grass, distant-object fade, LOD water reflections, volumetric lighting, screen-space reflections, ambient occlusion, depth of field and lens flare. Changes made afterwards stay.
+- Saves: the prefix's `Saves` folder is a link to `Saves/` in the game folder, so saves sit with the game files (e.g. on the SD card). Saves already in the prefix are copied there on the first launch, and the old folder is kept as `Saves.old`.
+  - The launcher shows the newest save above Play: character, level, location and the save's own screenshot, read from the `.ess` header.
+  - **Saves** lists recent saves and the backups. Before each launch, if anything changed, the 5 newest saves (with SKSE's `.skse` co-saves) are zipped into `SaveBackups/`, keeping the last 5. Restore puts a backup's saves back, backing up the current ones first.
+  - When you leave the app mid-game, it presses F5 (quicksave) and suspends the game 4 seconds later. If you come back first, the game just keeps running. It can be turned off in Options.
+- Options → Graphics driver: Turnip drivers in AdreNoTools format (a zip with `meta.json` and the library it names), kept in `contents/adrenotools/` like the bundled ones. **Download drivers** lists zips from the GitHub releases of whitebelyash's and K11MCH1's `AdrenoToolsDrivers` (whitebelyash's gen8 builds cover the Adreno 830). **Install from file** takes a zip on the device. A picked driver is used if it's still installed; otherwise the bundled one recommended for the GPU is used. `TU_DEBUG=sysmem` stays on for Adreno 8xx, which those builds' notes ask for on the A830.
+- Options → Game: skip the Bethesda intro video (`sIntroSequence` in `Skyrim.ini`, on by default); start with SKSE when `skse64_loader.exe` (the GOG build) is in the game folder; a performance overlay (the app's FPS counter or DXVK's detailed HUD). Battery saver is Low quality at 540p and 30 FPS. The frame limit sets both the app's frame limiter and DXVK's cap. SKSE's logs appear in View Logs.
+- The launcher and loading screen show the game's name, with a spinning wheel while it loads. A personal build can add a background picture as `res/drawable/game_backdrop` (jpg/png/webp). None is committed.
+- The controller is passed through as an Xbox pad, using Skyrim's own controller support. The launch log goes to `Download/Skyrim SE-launch.log` and appears in View Logs, which can save the whole report to `Download/` as a `.txt` file.
+- Audio: Skyrim's music and voices are xWMA. Wine's WMA decoder hands those to Proton's media converter, which fails without its pre-converted database and plays silence. So the container installs Microsoft's XAudio2 (the `xaudio` component, from GameNative's server), which decodes xWMA itself. Microsoft's WMA decoder isn't used: under Wine's XAudio2 it crashes in Wine's `mfplat`.
 
 Each app has its own branch and release series:
 
@@ -156,6 +214,9 @@ Each app has its own branch and release series:
 | `forever` | WoW Forever | `forever-v<version>` | `WoW-Forever.apk` |
 | `retail` | WoW Retail | `retail-v<version>` | `WoW-Retail.apk` |
 | `octowow` | OctoWoW | `octowow-v<version>` | `OctoWoW.apk` |
+| `skyrim` | Skyrim SE | `skyrim-v<version>` | `Skyrim-SE.apk` |
+| `nms` | No Man's Sky | `nms-v<version>` | `No-Mans-Sky.apk` |
+| `azeroth-survivors` | Azeroth Survivors | `azeroth-v<version>` | `Azeroth-Survivors.apk` |
 
 `.github/workflows/release-apk.yml` publishes them: a push to one of those branches that changes `versionName` builds that app and creates its release. Each app's updater picks the newest release carrying its own APK, so the three release independently. Add the `ANDROID_KEYSTORE_*` repository secrets described in the workflow so every release is signed with the same key; otherwise each run signs with a new debug key and installed apps can't update to it.
 

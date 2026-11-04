@@ -8,7 +8,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeFalse
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -49,7 +49,7 @@ class WowClientDownloaderTest {
     @Test
     fun readBuildInfo_selectsTargetProductFromMultiGameInstall() {
         // MPQ clients (OctoWoW) have no .build.info product to select.
-        assumeFalse(BuildConfig.MPQ_CLIENT)
+        assumeTrue(BuildConfig.BLIZZARD_CLIENT)
         val root = tempFolder.newFolder("multi_wow")
         val buildInfo = File(root, ".build.info")
         buildInfo.writeText(MULTI_GAME_HEADER + MULTI_GAME_ROWS.values.joinToString(""))
@@ -63,7 +63,7 @@ class WowClientDownloaderTest {
     @Test
     fun readBuildInfo_detectsIncompatibleGameWhenTargetMissingFromMultiGame() {
         // MPQ clients (OctoWoW) have no .build.info product to select.
-        assumeFalse(BuildConfig.MPQ_CLIENT)
+        assumeTrue(BuildConfig.BLIZZARD_CLIENT)
         val root = tempFolder.newFolder("multi_incompatible")
         val buildInfo = File(root, ".build.info")
         buildInfo.writeText(MULTI_GAME_HEADER + MULTI_GAME_ROWS.filterKeys { it != TARGET_PRODUCT }.values.joinToString(""))
@@ -86,7 +86,7 @@ class WowClientDownloaderTest {
 
     @Test
     fun migrateLegacyProduct_addsTargetRowClonedFromLegacy() {
-        assumeFalse(BuildConfig.MPQ_CLIENT)
+        assumeTrue(BuildConfig.BLIZZARD_CLIENT)
         val legacy = MULTI_GAME_ROWS.keys.first { it != TARGET_PRODUCT }
         val root = tempFolder.newFolder("legacy")
         val buildInfo = File(root, ".build.info")

@@ -16,10 +16,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,7 +47,9 @@ import app.gamenative.ui.screen.wow.WowClientDownloader.BUILD_INFO
 import app.gamenative.ui.screen.wow.WowClientDownloader.EXE_NAME
 import app.gamenative.ui.screen.wow.WowClientDownloader.FLAVOR_DIR
 import app.gamenative.ui.screen.wow.WowClientDownloader.TARGET_PRODUCT
-import app.gamenative.ui.theme.WowBackgroundGradient
+import app.gamenative.ui.components.GameBackdrop
+import app.gamenative.ui.screen.xserver.FPS_LIMITER_ENABLED_EXTRA
+import app.gamenative.ui.screen.xserver.FPS_LIMITER_TARGET_EXTRA
 import app.gamenative.ui.theme.WowBronze
 import app.gamenative.ui.theme.WowError
 import app.gamenative.ui.theme.WowGold
@@ -80,8 +87,8 @@ object WoWLauncherState {
 private const val CONTAINER_ID = "wow_forever"
 private const val REALMLIST = "realmlist.wtf"
 
-// The file that marks a folder as a game install: Blizzard clients have .build.info, MPQ clients only the exe.
-private val INSTALL_MARKER = if (BuildConfig.MPQ_CLIENT) EXE_NAME else BUILD_INFO
+// The file that marks a folder as a game install: Blizzard clients have .build.info, other games only the exe.
+private val INSTALL_MARKER = if (BuildConfig.BLIZZARD_CLIENT) BUILD_INFO else EXE_NAME
 private const val READY_STATUS = "Ready to launch"
 
 @Composable
@@ -96,9 +103,15 @@ fun WoWForeverScreen(
     var files by remember { mutableStateOf(GamePath.Status()) }
     var isLaunching by remember { mutableStateOf(false) }
     var launchJob by remember { mutableStateOf<Job?>(null) }
-    var hasSavedLogin by remember { mutableStateOf(BuildConfig.MPQ_CLIENT || BattleNetSignIn.load(context) != null) }
+    var hasSavedLogin by remember { mutableStateOf(!BuildConfig.BLIZZARD_CLIENT || BattleNetSignIn.load(context) != null) }
     var showLoginDialog by remember { mutableStateOf(false) }
     var showLogsDialog by remember { mutableStateOf(false) }
+    var showAddonsDialog by remember { mutableStateOf(false) }
+    var graphicsDocuments by remember { mutableStateOf<File?>(null) }
+    var showGraphicsDialog by remember { mutableStateOf(false) }
+    var showSavesDialog by remember { mutableStateOf(false) }
+    var latestSave by remember { mutableStateOf<SkyrimSaves.Save?>(null) }
+    var savesVersion by remember { mutableStateOf(0) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showStoragePermissionDialog by remember { mutableStateOf(false) }
@@ -166,12 +179,18 @@ fun WoWForeverScreen(
 
     suspend fun fetchVersionStatus() {
         isCheckingVersion = true
-        versionStatus = withContext(Dispatchers.IO) { WowClientDownloader.checkVersion(File(gamePath)) }
+        versionStatus = withContext(Dispatchers.IO) {
+            when {
+                BuildConfig.MPQ_CLIENT -> OctoClientUpdater.check(File(gamePath))
+                BuildConfig.BLIZZARD_CLIENT -> WowClientDownloader.checkVersion(File(gamePath))
+                else -> null // A plain game folder has nothing to update from.
+            }
+        }
         isCheckingVersion = false
     }
 
     fun checkVersionStatus() {
-        if (!File(gamePath, BUILD_INFO).exists()) return
+        if (!File(gamePath, INSTALL_MARKER).exists()) return
         scope.launch { fetchVersionStatus() }
     }
 
@@ -207,13 +226,14 @@ fun WoWForeverScreen(
 
         launchJob = scope.launch {
             try {
-                val screenSize = fitScreenSizeToWindow(context, gpu.screenSize)
+                val baseSize = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) gpu.screenSize else SkyrimGraphics.launch(context).resolution ?: gpu.screenSize
+                val screenSize = fitScreenSizeToWindow(context, baseSize)
                 val containerId = withContext(Dispatchers.IO) {
                     prepareLaunch(context, File(gamePath), gpu, screenSize) { msg ->
                         scope.launch(Dispatchers.Main) { statusText = msg }
                     }
                 }
-                statusText = "Booting into World of Warcraft..."
+                statusText = "Booting into ${BuildConfig.GAME_NAME}..."
                 onLaunch(containerId)
             } catch (e: CancellationException) {
                 throw e
@@ -267,12 +287,11 @@ fun WoWForeverScreen(
         }
     }
 
-    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        val path = StorageUtils.getPathFromTreeUri(context, uri) ?: return@rememberLauncherForActivityResult
+    fun useGameFolder(path: String) {
         val root = GamePath.findGameRoot(File(path))
         if (root == null) {
             errorMessage = "No $INSTALL_MARKER found in $path. Pick the folder that contains $INSTALL_MARKER and Data/."
-            return@rememberLauncherForActivityResult
+            return
         }
         errorMessage = null
         gamePath = root.absolutePath
@@ -286,36 +305,55 @@ fun WoWForeverScreen(
         }
     }
 
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        StorageUtils.getPathFromTreeUri(context, uri)?.let(::useGameFolder)
+    }
+    // Standalone GOG games can also be installed from GOG's offline installer.
+    val canInstallFromGog = remember { !BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT && GogInstaller.isAvailable(context) }
+    var showGogInstall by remember { mutableStateOf(false) }
+
     val filesMissing = !(files.dataExists && files.buildInfoExists)
     val canPlay = !isLaunching && !isUpdating && !filesMissing && !files.isWrongGame
 
-    fun performUpdate() {
-        val target = versionStatus ?: return
+    fun performUpdate(verifyAll: Boolean = false) {
+        val target = versionStatus ?: if (BuildConfig.MPQ_CLIENT) WowClientDownloader.VersionCheckResult("", "", false) else return
         if (isUpdating || isLaunching) return
         if (!files.hasStorageAccess) {
             showStoragePermissionDialog = true
             return
         }
         isUpdating = true
-        updateStatusText = "Connecting to Blizzard CDN..."
+        updateStatusText = if (BuildConfig.MPQ_CLIENT) "Connecting to the OctoWoW update server..." else "Connecting to Blizzard CDN..."
         errorMessage = null
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    WowClientDownloader.updateGame(File(gamePath), target) { msg ->
-                        scope.launch(Dispatchers.Main) { updateStatusText = msg }
+                    val onStatus: (String) -> Unit = { msg -> scope.launch(Dispatchers.Main) { updateStatusText = msg } }
+                    if (BuildConfig.MPQ_CLIENT) {
+                        OctoClientUpdater.update(File(gamePath), verifyAll, onStatus)
+                    } else {
+                        WowClientDownloader.updateGame(File(gamePath), target, onStatus)
                     }
                 }
                 checkFiles()
                 versionStatus = versionStatus?.copy(isOutdated = false, localVersion = target.remoteVersion)
                 isUpdating = false
-                launchGame()
+                // A manual file check only repairs; it doesn't start the game.
+                if (!verifyAll) launchGame()
             } catch (e: Exception) {
                 Timber.e(e, "Error updating game")
                 if (e.isPermissionDenied()) denyStorageAccess()
                 errorMessage = "Update failed: ${e.message}"
                 isUpdating = false
             }
+        }
+    }
+
+    // Skyrim: the newest save for the Continue card, refreshed when the game exits.
+    if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
+        LaunchedEffect(gamePath, isLaunching, savesVersion) {
+            if (isLaunching || gamePath.isEmpty()) return@LaunchedEffect
+            latestSave = withContext(Dispatchers.IO) { runCatching { SkyrimSaves.latest(File(gamePath)) }.getOrNull() }
         }
     }
 
@@ -353,10 +391,10 @@ fun WoWForeverScreen(
         }
     }
 
+    GameBackdrop {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(WowBackgroundGradient))
             .padding(24.dp)
     ) {
         Column(
@@ -369,7 +407,7 @@ fun WoWForeverScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
-                    text = "WORLD OF WARCRAFT",
+                    text = BuildConfig.LAUNCHER_TITLE,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Black,
                     fontFamily = FontFamily.Serif,
@@ -405,6 +443,9 @@ fun WoWForeverScreen(
                             CheckItem(label = "Game Client ($EXE_NAME)", ready = files.exeExists)
                             CheckItem(label = "Game Asset Archives (Data/)", ready = files.dataExists)
                             CheckItem(label = "Realm List ($REALMLIST)", ready = files.realmlistExists)
+                        } else if (!BuildConfig.BLIZZARD_CLIENT) {
+                            CheckItem(label = "Game Executable ($EXE_NAME)", ready = files.exeExists)
+                            CheckItem(label = "Game Data (Data/)", ready = files.dataExists)
                         } else {
                             CheckItem(label = if (files.exeExists) "ARM64 Binary ($EXE_NAME)" else "ARM64 Binary (downloads on Play)", ready = files.exeExists)
                             CheckItem(label = "Game Asset Archives (Data/)", ready = files.dataExists)
@@ -414,7 +455,7 @@ fun WoWForeverScreen(
                             )
                         }
                         CheckItem(label = "All Files Access Permission", ready = files.hasStorageAccess)
-                        if (!BuildConfig.MPQ_CLIENT) {
+                        if (BuildConfig.BLIZZARD_CLIENT) {
                             CheckItem(
                                 label = if (hasSavedLogin) "Battle.net Login (Configured)" else "Battle.net Login (Configure below play button)",
                                 ready = hasSavedLogin,
@@ -471,14 +512,22 @@ fun WoWForeverScreen(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Live servers require build ${version.remoteVersion}, but local files are build ${version.localVersion}. Logging in may fail or disconnect at realm selection.",
+                            text = if (BuildConfig.MPQ_CLIENT) {
+                                "OctoWoW published a new client (${version.remoteVersion}); your files are from ${version.localVersion}. Logging in may fail until you update."
+                            } else {
+                                "Live servers require build ${version.remoteVersion}, but local files are build ${version.localVersion}. Logging in may fail or disconnect at realm selection."
+                            },
                             fontSize = 12.sp,
                             color = Color(0xFFFED7D7),
                             lineHeight = 16.sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap Update below to download the latest files directly from Blizzard's CDN over Wi-Fi.",
+                            text = if (BuildConfig.MPQ_CLIENT) {
+                                "Tap Update below to download only the changed files from OctoWoW's servers over Wi-Fi."
+                            } else {
+                                "Tap Update below to download the latest files directly from Blizzard's CDN over Wi-Fi."
+                            },
                             fontSize = 11.sp,
                             color = Color(0xFFCBD5E1)
                         )
@@ -559,6 +608,23 @@ fun WoWForeverScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Text("LOCATE GAME FILES", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WowGold)
                         }
+                        if (canInstallFromGog) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = { showGogInstall = true },
+                                modifier = Modifier.fillMaxWidth(0.85f).height(48.dp),
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(20.dp), tint = WowGold)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text("INSTALL FROM GOG INSTALLER", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WowGold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    latestSave?.takeIf { !filesMissing }?.let { save ->
+                        ContinueCard(save) { showSavesDialog = true }
                         Spacer(modifier = Modifier.height(10.dp))
                     }
 
@@ -568,7 +634,7 @@ fun WoWForeverScreen(
                                 text = "UPDATE TO ${versionStatus?.remoteVersion}",
                                 icon = Icons.Default.Refresh,
                                 enabled = canPlay,
-                                onClick = ::performUpdate,
+                                onClick = { performUpdate() },
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             OutlinedButton(
@@ -587,7 +653,7 @@ fun WoWForeverScreen(
                             onClick = { StorageUtils.requestManageExternalStoragePermission(context) },
                         )
                         else -> PrimaryButton(
-                            text = if (files.isWrongGame) "${BuildConfig.GAME_EDITION.uppercase()} REQUIRED" else if (BuildConfig.MPQ_CLIENT) "PLAY ${BuildConfig.GAME_NAME.uppercase()}" else "PLAY WORLD OF WARCRAFT",
+                            text = if (files.isWrongGame) "${BuildConfig.GAME_EDITION.uppercase()} REQUIRED" else if (BuildConfig.BLIZZARD_CLIENT) "PLAY WORLD OF WARCRAFT" else "PLAY ${BuildConfig.GAME_NAME.uppercase()}",
                             icon = Icons.Default.PlayArrow,
                             enabled = canPlay,
                             onClick = ::launchGame,
@@ -608,7 +674,7 @@ fun WoWForeverScreen(
                         if (!filesMissing) {
                             LinkButton("Change Location", Icons.Default.FolderOpen) { folderPicker.launch(null) }
                         }
-                        if (!BuildConfig.MPQ_CLIENT) {
+                        if (BuildConfig.BLIZZARD_CLIENT) {
                             LinkButton(
                                 text = if (hasSavedLogin) "Update Login" else "Configure Login",
                                 icon = Icons.Default.Key,
@@ -616,7 +682,7 @@ fun WoWForeverScreen(
                                 showLoginDialog = true
                             }
                         }
-                        if (hasSavedLogin && !BuildConfig.MPQ_CLIENT) {
+                        if (hasSavedLogin && BuildConfig.BLIZZARD_CLIENT) {
                             LinkButton("Forget Saved Login", Icons.Default.Delete) {
                                 BattleNetSignIn.forget(context)
                                 BattleNetSignIn.removeLoginFile(File(gamePath))
@@ -624,12 +690,40 @@ fun WoWForeverScreen(
                             }
                         }
                     }
-                    LinkButton("View Logs", Icons.Default.Description) { showLogsDialog = true }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (!filesMissing && (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT)) {
+                            LinkButton("Add-ons", Icons.Default.Extension) { showAddonsDialog = true }
+                        }
+                        if (BuildConfig.MPQ_CLIENT && !filesMissing) {
+                            LinkButton("Verify Game Files", Icons.Default.FactCheck) {
+                                if (!isUpdating && !isLaunching) performUpdate(verifyAll = true)
+                            }
+                        }
+                        if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
+                            if (!filesMissing) {
+                                LinkButton("Saves", Icons.Default.Save) { showSavesDialog = true }
+                            }
+                            LinkButton("Options", Icons.Default.Tune) {
+                                scope.launch {
+                                    graphicsDocuments = withContext(Dispatchers.IO) { prefixDocuments(context) }
+                                    showGraphicsDialog = true
+                                }
+                            }
+                        }
+                        if (canInstallFromGog && !filesMissing) {
+                            LinkButton("Install", Icons.Default.Download) { showGogInstall = true }
+                        }
+                        LinkButton("View Logs", Icons.Default.Description) { showLogsDialog = true }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
     }
 
     if (showLoginDialog) {
@@ -640,6 +734,36 @@ fun WoWForeverScreen(
                 BattleNetSignIn.save(context, login)
                 hasSavedLogin = true
             },
+        )
+    }
+
+    if (showAddonsDialog) {
+        AddonsDialog(gameRoot = File(gamePath), onDismiss = { showAddonsDialog = false })
+    }
+
+    if (showGraphicsDialog) {
+        SkyrimGraphicsDialog(
+            documentsDir = graphicsDocuments,
+            skseInstalled = File(gamePath, SkyrimConfig.SKSE_LOADER).isFile,
+            recommendedDriver = gpu.driver,
+            defaultResolution = gpu.screenSize,
+            onDismiss = { showGraphicsDialog = false },
+        )
+    }
+
+    if (showSavesDialog) {
+        SkyrimSavesDialog(
+            gameRoot = File(gamePath),
+            onDismiss = { showSavesDialog = false },
+            onChanged = { savesVersion++ },
+        )
+    }
+
+    if (showGogInstall) {
+        GogInstallDialog(
+            marker = INSTALL_MARKER,
+            onInstalled = { useGameFolder(it.absolutePath) },
+            onDismiss = { showGogInstall = false },
         )
     }
 
@@ -821,7 +945,9 @@ object GamePath {
     fun status(context: Context, path: String): Status {
         val root = File(path)
         // Every readiness check runs this first, so a beta install is on the release product before it's judged.
-        runCatching { WowClientDownloader.migrateLegacyProduct(root) }.onFailure { Timber.w(it, "Install migration failed") }
+        if (BuildConfig.BLIZZARD_CLIENT) {
+            runCatching { WowClientDownloader.migrateLegacyProduct(root) }.onFailure { Timber.w(it, "Install migration failed") }
+        }
         return Status(
             exeExists = File(root, "$FLAVOR_DIR/$EXE_NAME").exists(),
             dataExists = File(root, "Data").listFiles()?.isNotEmpty() == true,
@@ -843,7 +969,7 @@ object GamePath {
     }
 
     fun isReady(context: Context, path: String = load(context)): Boolean =
-        path.isNotEmpty() && status(context, path).let { it.isReady && (BuildConfig.MPQ_CLIENT || it.product == TARGET_PRODUCT) }
+        path.isNotEmpty() && status(context, path).let { it.isReady && (!BuildConfig.BLIZZARD_CLIENT || it.product == TARGET_PRODUCT) }
 
     fun findGameRoot(picked: File): File? =
         sequenceOf(picked, picked.parentFile, File(picked, BuildConfig.DEFAULT_GAME_FOLDER), File(picked, "World of Warcraft"))
@@ -851,7 +977,7 @@ object GamePath {
             .firstOrNull { File(it, INSTALL_MARKER).isFile }
 
     private fun isGameRoot(root: File) =
-        if (BuildConfig.MPQ_CLIENT) File(root, EXE_NAME).isFile else productOf(root) == TARGET_PRODUCT
+        if (BuildConfig.BLIZZARD_CLIENT) productOf(root) == TARGET_PRODUCT else File(root, EXE_NAME).isFile
 
     private fun productOf(root: File) = WowClientDownloader.readBuildInfo(File(root, BUILD_INFO))?.get("Product")
 }
@@ -906,8 +1032,13 @@ private fun Throwable.isPermissionDenied() =
 
 private const val DEFAULT_DRIVER = "Turnip-WoW-scheduler-test"
 private const val ADRENO_8XX_DRIVER = "Turnip-V32-RP6sched"
+
+/** The Turnip drivers that ship in the APK; downloaded ones can't replace or remove them. */
+internal val BUNDLED_DRIVERS = setOf(DEFAULT_DRIVER, ADRENO_8XX_DRIVER)
 private const val PROTON_VERSION = "proton-11.0-90624-arm64ec"
 private const val DXVK_VERSION = "2.4.1-wow-aarch64-test"
+private const val X64_DXVK_VERSION = "2.6.1-gplasync"
+private const val X64_FEXCORE_VERSION = "2605"
 
 private data class GpuProfile(val driver: String, val tuDebug: String, val screenSize: String, val label: String, val edition: String) {
     companion object {
@@ -951,15 +1082,21 @@ internal fun fitScreenSize(baseSize: String, windowWidth: Int, windowHeight: Int
     return "${(width / 2).roundToInt() * 2}x${(height / 2).roundToInt() * 2}"
 }
 
+private const val PREFIX_DOCUMENTS = ".wine/drive_c/users/xuser/Documents"
+
+/** The Wine prefix's Documents folder, or null before the first launch has created the prefix. */
+internal fun prefixDocuments(context: Context): File? =
+    ContainerManager(context).getContainerById(CONTAINER_ID)?.let { File(it.rootDir, PREFIX_DOCUMENTS) }?.takeIf { it.isDirectory }
+
 private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, screenSize: String, onStatus: (String) -> Unit): String {
     installBundledComponents(context, onStatus)
 
-    check(File(gameRoot, INSTALL_MARKER).exists()) { "Missing $INSTALL_MARKER in $gameRoot. Copy it from your WoW install." }
+    check(File(gameRoot, INSTALL_MARKER).exists()) { "Missing $INSTALL_MARKER in $gameRoot. Copy it from your ${BuildConfig.GAME_NAME} install." }
     try {
         if (BuildConfig.MPQ_CLIENT) {
             MpqClient.ensureGameConfig(gameRoot, screenSize)
             MpqClient.installControllerAddon(context, gameRoot)
-        } else {
+        } else if (BuildConfig.BLIZZARD_CLIENT) {
             ensureGameConfig(gameRoot, screenSize)
         }
     } catch (e: Exception) {
@@ -987,7 +1124,12 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
 
     onStatus("Configuring ${gpu.label} container...")
     val containerManager = ContainerManager(context)
-    val config = containerConfig(gameRoot, gpu, screenSize)
+    val launch = SkyrimGraphics.launch(context)
+    // A driver picked in Options, if it's still installed; otherwise the one recommended for this GPU.
+    val chosenDriver = launch.driver?.takeIf {
+        !BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT && File(TurnipDrivers.driversDir(context), "$it/meta.json").isFile
+    }
+    val config = containerConfig(gameRoot, chosenDriver?.let { gpu.copy(driver = it) } ?: gpu, screenSize, launch)
     val container = containerManager.getContainerById(CONTAINER_ID)
     if (container == null) {
         onStatus("Creating prefix environment (first boot)...")
@@ -998,12 +1140,29 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
     }
     check(containerManager.hasContainer(CONTAINER_ID)) { "Container creation failed. Check system storage and logs." }
     if (BuildConfig.MPQ_CLIENT) containerManager.getContainerById(CONTAINER_ID)?.let { MpqClient.applyControllerProfile(context, it) }
+    if (!BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT) {
+        // Skyrim reads its settings from Documents/My Games in the Wine prefix, not from the game folder.
+        // Saves are linked into the game folder so they live with the game on the SD card.
+        containerManager.getContainerById(CONTAINER_ID)?.let {
+            val documents = File(it.rootDir, PREFIX_DOCUMENTS)
+            SkyrimConfig.ensure(documents, screenSize, SkyrimGraphics.pendingFile(context))
+            runCatching { SkyrimConfig.applyIntro(documents, gameRoot, launch.skipIntro) }.onFailure { e -> Timber.w(e, "Couldn't set the intro video") }
+            // The app's own frame limiter (also in the in-game menu) follows the launcher's frame limit.
+            it.putExtra(FPS_LIMITER_ENABLED_EXTRA, true)
+            it.putExtra(FPS_LIMITER_TARGET_EXTRA, launch.frameLimit)
+            it.saveData()
+            runCatching { SkyrimConfig.linkSaves(documents, gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't link Skyrim saves") }
+            onStatus("Backing up saves...")
+            runCatching { SkyrimSaves.backUp(gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't back up Skyrim saves") }
+        }
+    }
     return CONTAINER_ID
 }
 
-private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String): JSONObject {
+private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String, launch: SkyrimGraphics.Launch): JSONObject {
     val samsungEnv = if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) " FD_DEV_FEATURES=enable_tp_ubwc_flag_hint=1" else ""
-    val envVars = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact,deck_emu MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=0 MESA_VK_WSI_PRESENT_MODE=mailbox TU_DEBUG=${gpu.tuDebug} VKD3D_SHADER_MODEL=6_0 PULSE_LATENCY_MSEC=144$samsungEnv"
+    val hudEnv = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT || launch.hud.isEmpty()) "" else " DXVK_HUD=${launch.hud}"
+    val envVars = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact,deck_emu MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=0 MESA_VK_WSI_PRESENT_MODE=mailbox TU_DEBUG=${gpu.tuDebug} VKD3D_SHADER_MODEL=6_0 PULSE_LATENCY_MSEC=144$samsungEnv$hudEnv"
     return JSONObject().apply {
         put("id", CONTAINER_ID)
         put("name", BuildConfig.GAME_NAME)
@@ -1025,6 +1184,19 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
             put("emulator", "wowbox64")
             put("executablePath", "G:\\${MpqClient.launchExe(gameRoot)}")
             put("execArgs", "")
+        } else if (!BuildConfig.BLIZZARD_CLIENT) {
+            // 64-bit x86 game: Proton runs it through FEX's libarm64ecfex.dll (bundled as fexcore-2605 in
+            // this flavor's assets), with x86-64 DXVK fetched from GameNative's component server.
+            // FEX's intermediate preset keeps x86 memory ordering (TSO) for Skyrim's worker threads.
+            put("emulator", "FEXCore")
+            put("fexcoreVersion", X64_FEXCORE_VERSION)
+            put("fexcorePreset", "INTERMEDIATE")
+            // gplasync compiles shaders in the background instead of stalling a frame for each one, and
+            // the 60 FPS cap keeps Skyrim's physics, which break above 60, sane on a 120 Hz screen.
+            put("dxwrapper", "dxvk")
+            put("dxwrapperConfig", "version=$X64_DXVK_VERSION,framerate=${launch.frameLimit},maxDeviceMemory=0,async=1,asyncCache=1")
+            put("executablePath", "G:\\${SkyrimConfig.launchExe(gameRoot, launch.skse, EXE_NAME)}")
+            put("execArgs", "")
         } else {
             put("executablePath", "G:\\$FLAVOR_DIR\\$EXE_NAME")
             put("execArgs", "-d3d11")
@@ -1032,7 +1204,11 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String)
         put("showFPS", true)
         put("startupSelection", Container.STARTUP_SELECTION_AGGRESSIVE.toInt())
         put("wow64Mode", true)
-        put("wincomponents", "direct3d=0,directsound=0,directinput8=0,directinput=0,directmusic=0,directshow=0,directplay=0,vcrun2010=0,wmdecoder=0,opengl=0")
+        // Skyrim's music and voices are xWMA. Wine's XAudio2 decodes those through its WMA decoder and Proton's
+        // media converter, which fails without its pre-converted database and plays silence. Microsoft's XAudio2
+        // decodes xWMA itself. (Microsoft's WMA decoder under Wine's XAudio2 crashes in Wine's mfplat instead.)
+        val xaudio = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) "" else ",xaudio=1"
+        put("wincomponents", "direct3d=0,directsound=0,directinput8=0,directinput=0,directmusic=0,directshow=0,directplay=0,vcrun2010=0,wmdecoder=0,opengl=0$xaudio")
     }
 }
 

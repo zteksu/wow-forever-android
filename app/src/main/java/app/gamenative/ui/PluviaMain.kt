@@ -294,7 +294,7 @@ fun PluviaMain(
             Box(modifier = Modifier.zIndex(10f)) {
                 BootingSplash(
                     visible = state.showBootingSplash || initialSplash,
-                    text = if (state.showBootingSplash) state.bootingSplashText else "Booting into World of Warcraft...",
+                    text = if (state.showBootingSplash) state.bootingSplashText else "Booting into ${BuildConfig.GAME_NAME}...",
                     onAbort = {
                         initialSplash = false
                         preLaunchJob?.cancel()

@@ -45,12 +45,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.font.FontFamily
+import app.gamenative.BuildConfig
 import app.gamenative.PluviaApp
 import app.gamenative.R
 import app.gamenative.events.AndroidEvent
 import app.gamenative.ui.theme.BrandGradient
 import app.gamenative.ui.theme.PluviaTheme
-import app.gamenative.ui.theme.WowBackgroundGradient
 import app.gamenative.ui.theme.WowGold
 
 @Composable
@@ -104,6 +108,8 @@ fun BootingSplash(
         }
     }
 
+    val isWow = BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT
+
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(animationSpec = tween(durationMillis = 400)),
@@ -120,88 +126,131 @@ fun BootingSplash(
             label = "shimmer",
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(WowBackgroundGradient)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(horizontal = 32.dp),
+        GameBackdrop(scrim = 0.35f) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
             ) {
-                Spacer(modifier = Modifier.weight(0.4f))
-
-                Text(
-                    text = "World of Warcraft",
-                    style = MaterialTheme.typography.displaySmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 32.sp,
-                        letterSpacing = 2.sp,
-                        shadow = Shadow(
-                            color = Color(0xFFC7AF8E).copy(alpha = 0.6f),
-                            offset = Offset(0f, 0f),
-                            blurRadius = 20f,
-                        ),
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(Color(0xFFF5E296), Color(0xFFE5C158), Color(0xFFC7AF8E)),
-                        ),
-                    ),
-                )
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                ProgressBar(
-                    progress = progress,
-                    shimmerPosition = shimmerPosition,
-                    modifier = Modifier
-                        .fillMaxWidth(0.7f)
-                        .height(4.dp),
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 1.sp,
-                    ),
-                    color = Color.White.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "Press Start + Select + L2 + R2 to return to setup screen",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 11.sp,
-                        letterSpacing = 1.sp,
-                    ),
-                    color = WowGold.copy(alpha = 0.8f),
-                    textAlign = TextAlign.Center,
-                )
-
-                Spacer(modifier = Modifier.weight(0.4f))
-            }
-
-            if (onAbort != null) {
-                IconButton(
-                    onClick = onAbort,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(12.dp)
-                        .background(Color.Black.copy(alpha = 0.45f), CircleShape),
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 32.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.back),
-                        tint = Color.White,
+                    Spacer(modifier = Modifier.weight(0.4f))
+
+                    if (!isWow) {
+                        SpinnerSplash(progress)
+                    } else {
+                        Text(
+                            text = "World of Warcraft",
+                            style = MaterialTheme.typography.displaySmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 32.sp,
+                                letterSpacing = 2.sp,
+                                shadow = Shadow(
+                                    color = Color(0xFFC7AF8E).copy(alpha = 0.6f),
+                                    offset = Offset(0f, 0f),
+                                    blurRadius = 20f,
+                                ),
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(Color(0xFFF5E296), Color(0xFFE5C158), Color(0xFFC7AF8E)),
+                                ),
+                            ),
+                        )
+
+                        Spacer(modifier = Modifier.height(28.dp))
+
+                        ProgressBar(
+                            progress = progress,
+                            shimmerPosition = shimmerPosition,
+                            modifier = Modifier
+                                .fillMaxWidth(0.7f)
+                                .height(4.dp),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 1.sp,
+                        ),
+                        color = Color.White.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
                     )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Press Start + Select + L2 + R2 to return to setup screen",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 11.sp,
+                            letterSpacing = 1.sp,
+                        ),
+                        color = if (isWow) WowGold.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.55f),
+                        textAlign = TextAlign.Center,
+                    )
+
+                    Spacer(modifier = Modifier.weight(0.4f))
+                }
+
+                if (onAbort != null) {
+                    IconButton(
+                        onClick = onAbort,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(12.dp)
+                            .background(Color.Black.copy(alpha = 0.45f), CircleShape),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                            tint = Color.White,
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+/** The loading screen for the non-WoW games: the game's title over a spinning wheel. */
+@Composable
+private fun SpinnerSplash(progress: Float) {
+    Text(
+        text = BuildConfig.LAUNCHER_TITLE,
+        style = MaterialTheme.typography.displaySmall.copy(
+            fontFamily = FontFamily.Serif,
+            fontWeight = FontWeight.Normal,
+            fontSize = 40.sp,
+            letterSpacing = 10.sp,
+            shadow = Shadow(color = Color.Black.copy(alpha = 0.8f), offset = Offset(0f, 2f), blurRadius = 12f),
+        ),
+        color = Color(0xFFE8E4DC),
+    )
+
+    Spacer(modifier = Modifier.height(28.dp))
+
+    val spinnerColor = Color(0xFFE8E4DC)
+    val trackColor = Color.White.copy(alpha = 0.15f)
+    if (progress < 0f) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(44.dp),
+            color = spinnerColor,
+            trackColor = trackColor,
+            strokeWidth = 3.dp,
+            strokeCap = StrokeCap.Round,
+        )
+    } else {
+        CircularProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            modifier = Modifier.size(44.dp),
+            color = spinnerColor,
+            trackColor = trackColor,
+            strokeWidth = 3.dp,
+            strokeCap = StrokeCap.Round,
+        )
     }
 }
 

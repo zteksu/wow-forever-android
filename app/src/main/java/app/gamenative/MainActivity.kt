@@ -26,6 +26,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import app.gamenative.BuildConfig
+import com.winlator.xserver.XKeycode
+import app.gamenative.ui.screen.wow.SkyrimGraphics
+import android.os.Looper
+import android.os.Handler
 import app.gamenative.PrefManager
 import app.gamenative.events.AndroidEvent
 import app.gamenative.ui.PluviaMain
@@ -39,6 +43,9 @@ import com.winlator.inputcontrols.ControllerManager
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.EnumSet
 import timber.log.Timber
+
+private const val QUICKSAVE_KEY_HOLD_MS = 150L
+private const val QUICKSAVE_SUSPEND_DELAY_MS = 4000L
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -143,6 +150,23 @@ class MainActivity : ComponentActivity() {
         PluviaApp.events.off<AndroidEvent.EndProcess, Unit>(onEndProcess)
     }
 
+    private val suspendHandler = Handler(Looper.getMainLooper())
+    private var pendingSuspend: Runnable? = null
+
+    /**
+     * Skyrim: presses F5 (quicksave) when the app is left, so little is lost if Android closes it in the
+     * background. The game is suspended a few seconds later, once the save has had time to finish.
+     */
+    private fun quicksaveBeforeSuspend(): Boolean {
+        if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT || PluviaApp.isBootingSplashShowing) return false
+        if (!SkyrimGraphics.launch(this).quicksaveOnLeave) return false
+        val xServer = PluviaApp.xServerView?.getxServer() ?: return false
+        xServer.injectKeyPress(XKeycode.KEY_F5)
+        suspendHandler.postDelayed({ xServer.injectKeyRelease(XKeycode.KEY_F5) }, QUICKSAVE_KEY_HOLD_MS)
+        Timber.d("Quicksaving before the game is suspended")
+        return true
+    }
+
     private fun hasReadyGameLifecycleState(action: String): Boolean {
         if (!PluviaApp.keepAlive) return false
         if (!PluviaApp.hasValidSuspendPolicyState()) {
@@ -163,6 +187,14 @@ class MainActivity : ComponentActivity() {
         // Re-apply immersive mode to ensure fullscreen persists
         if (!desiredSystemUiVisible) {
             applyImmersiveMode()
+        }
+
+        // Back before the quicksave's delayed suspend ran: the game was never paused.
+        pendingSuspend?.let {
+            suspendHandler.removeCallbacks(it)
+            pendingSuspend = null
+            Timber.d("Game kept running: returned before the delayed suspend")
+            return
         }
 
         // Resume game according to the active suspend policy.
@@ -198,12 +230,21 @@ class MainActivity : ComponentActivity() {
                     Timber.d("Game pause skipped due to suspend policy=never")
                 }
                 else -> {
-                    PluviaApp.xEnvironment?.onPause()
-                    if (PluviaApp.isManualSuspendMode()) {
-                        PluviaApp.isOverlayPaused = true
-                        Timber.d("Game paused due to app backgrounded (manual resume required)")
+                    val suspend = Runnable {
+                        pendingSuspend = null
+                        PluviaApp.xEnvironment?.onPause()
+                        if (PluviaApp.isManualSuspendMode()) {
+                            PluviaApp.isOverlayPaused = true
+                            Timber.d("Game paused due to app backgrounded (manual resume required)")
+                        } else {
+                            Timber.d("Game paused due to app backgrounded")
+                        }
+                    }
+                    if (quicksaveBeforeSuspend()) {
+                        pendingSuspend = suspend
+                        suspendHandler.postDelayed(suspend, QUICKSAVE_SUSPEND_DELAY_MS)
                     } else {
-                        Timber.d("Game paused due to app backgrounded")
+                        suspend.run()
                     }
                 }
             }

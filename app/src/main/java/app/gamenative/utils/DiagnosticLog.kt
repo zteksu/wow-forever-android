@@ -14,6 +14,9 @@ import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import app.gamenative.BuildConfig
 import app.gamenative.CrashHandler
+import app.gamenative.ui.screen.wow.GamePath
+import app.gamenative.ui.screen.wow.SkyrimConfig
+import app.gamenative.ui.screen.wow.prefixDocuments
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -29,6 +32,11 @@ import timber.log.Timber
 object DiagnosticLog {
     private const val MAX_LOG_BYTES = 512 * 1024L
     private const val REPORT_LOG_LINES = 1500
+    private const val REPORT_LAUNCH_LINES = 1200
+    private const val GAME_FILE_LINES = 80
+
+    // Older launch logs still contain these per-file redirect and controller-shim lines.
+    private val LAUNCH_LOG_NOISE = listOf("I replace:", "evshim:")
     private const val REPORT_LOGCAT_LINES = 500
     private const val MAX_EXIT_REASONS = 8
     private const val MAX_CLIPBOARD_CHARS = 100_000
@@ -85,6 +93,26 @@ object DiagnosticLog {
         appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
         appendLine()
 
+        if (!BuildConfig.BLIZZARD_CLIENT) {
+            // XServerScreen writes the Wine launch log to Download/ for the emulated games. It comes first so a
+            // copied or previewed report, which keeps the start, always includes how the game exited.
+            val launchLog = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                "${BuildConfig.GAME_NAME}-launch.log",
+            )
+            appendLine("---------- Game launch log (last $REPORT_LAUNCH_LINES lines) ----------")
+            appendLine(
+                runCatching {
+                    launchLog.readLines()
+                        .filterNot { line -> LAUNCH_LOG_NOISE.any { line.startsWith(it) } }
+                        .takeLast(REPORT_LAUNCH_LINES)
+                        .joinToString("\n")
+                }.getOrElse { "(unavailable: ${it.message})" },
+            )
+            appendLine()
+            appendGameFolderLogs(context)
+        }
+
         appendLine("---------- Previous exits (newest first) ----------")
         appendLine(exitReasons(context))
         appendLine()
@@ -104,22 +132,30 @@ object DiagnosticLog {
         appendLine(lines.takeLast(REPORT_LOG_LINES).joinToString("\n").ifEmpty { "(empty)" })
         appendLine()
 
-        if (BuildConfig.MPQ_CLIENT) {
-            // XServerScreen writes the Wine launch log to Download/ for the MPQ client.
-            val launchLog = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                "${BuildConfig.GAME_NAME}-launch.log",
-            )
-            appendLine("---------- Game launch log (last $REPORT_LOG_LINES lines) ----------")
-            appendLine(
-                runCatching { launchLog.readLines().takeLast(REPORT_LOG_LINES).joinToString("\n") }
-                    .getOrElse { "(unavailable: ${it.message})" },
-            )
-            appendLine()
-        }
-
         appendLine("---------- Logcat (this session) ----------")
         appendLine(CrashHandler.getAppLogs(REPORT_LOGCAT_LINES))
+    }
+
+    /** The client's own logs from its folder: the DXVK log and the newest Logs/ and Errors/ files. */
+    private fun StringBuilder.appendGameFolderLogs(context: Context) {
+        val root = File(GamePath.load(context))
+        val skse = if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) {
+            emptyList()
+        } else {
+            prefixDocuments(context)?.let { SkyrimConfig.skseLogs(it) }.orEmpty().filter { it.isFile }
+        }
+        val files = skse + listOfNotNull(
+            File(root, "WoW_d3d9.log"),
+            File(root, "Logs").listFiles()?.filter { it.isFile }?.maxByOrNull { it.lastModified() },
+            File(root, "Errors").listFiles()?.filter { it.isFile }?.maxByOrNull { it.lastModified() },
+        )
+        for (file in files) {
+            appendLine("---------- ${if (file.startsWith(root)) file.relativeTo(root) else file.name} (${if (file.isFile) fileTime.format(Date(file.lastModified())) else "missing"}) ----------")
+            if (file.isFile) {
+                appendLine(runCatching { file.readLines().takeLast(GAME_FILE_LINES).joinToString("\n") }.getOrElse { "(unreadable: ${it.message})" })
+            }
+            appendLine()
+        }
     }
 
     private fun exitReasons(context: Context): String {
@@ -168,6 +204,12 @@ object DiagnosticLog {
         context.getSystemService(ClipboardManager::class.java)
             .setPrimaryClip(ClipData.newPlainText("${BuildConfig.GAME_NAME} log", text))
     }
+
+    /** Writes [report] to Download/ as a .txt file and returns it, or null if that failed. */
+    fun saveToDownloads(report: String): File? = runCatching {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).apply { mkdirs() }
+        File(dir, "${BuildConfig.RELEASE_APK_PREFIX}-log-${fileTime.format(Date())}.txt").apply { writeText(report) }
+    }.onFailure { Timber.w(it, "Saving log failed") }.getOrNull()
 
     fun share(context: Context, report: String) {
         runCatching {

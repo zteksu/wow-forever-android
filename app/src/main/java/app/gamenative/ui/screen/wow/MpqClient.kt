@@ -16,8 +16,35 @@ import timber.log.Timber
 object MpqClient {
     private const val VANILLA_FIXES = "VanillaFixes.exe"
     private const val ADDON = "ShaguController"
-    private const val PROFILE_ID = 900
-    private const val PROFILE_NAME = "OctoWoW Controller"
+    private const val DLLS_TXT = "dlls.txt"
+    private const val PROFILE_VERSION = 2
+    private const val VANILLA_HELPERS = "VanillaHelpers.dll"
+    private const val PREFS = "octo_client"
+    private const val KEY_LAYOUT = "controller_layout"
+
+    /**
+     * The controller addon in use, each with its own key layout and controller profile. [bundled] addons ship
+     * in the APK; the others are downloaded when picked.
+     */
+    enum class ControllerLayout(
+        val title: String,
+        val addonFolder: String,
+        val profileId: Int,
+        val profileName: String,
+        val bundled: Boolean,
+    ) {
+        SHAGU("ShaguController", ADDON, 900, "OctoWoW Controller", true),
+        CONSOLE_EXPERIENCE("ConsoleExperience", "ConsoleExperienceClassic", 901, "OctoWoW ConsoleExperience", false),
+        OCTOPAD("Forever Gamepad", "OctoPad", 902, "OctoWoW Forever Gamepad", true),
+    }
+
+    fun controllerLayout(context: Context): ControllerLayout =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_LAYOUT, null)
+            ?.let { name -> ControllerLayout.entries.firstOrNull { it.name == name } } ?: ControllerLayout.SHAGU
+
+    fun setControllerLayout(context: Context, layout: ControllerLayout) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_LAYOUT, layout.name).apply()
+    }
 
     /**
      * VanillaFixes starts WoW.exe and injects the client mods listed in dlls.txt (nampower, UnitXP, ...),
@@ -26,12 +53,38 @@ object MpqClient {
     fun launchExe(gameRoot: File): String =
         if (File(gameRoot, VANILLA_FIXES).isFile) VANILLA_FIXES else WowClientDownloader.EXE_NAME
 
-    /** Copies the bundled ShaguController addon into Interface/AddOns unless the player already has it. */
+    /**
+     * Copies the current layout's addon into Interface/AddOns if it ships in the APK. ShaguController is
+     * left alone once the player has it; OctoPad is refreshed so app updates bring its fixes along.
+     */
     fun installControllerAddon(context: Context, gameRoot: File) {
-        val dest = File(gameRoot, "Interface/AddOns/$ADDON")
-        if (File(dest, "$ADDON.toc").isFile) return
-        runCatching { copyAssetDir(context, "addons/$ADDON", dest) }
-            .onFailure { Timber.e(it, "Failed to install $ADDON") }
+        val layout = controllerLayout(context)
+        if (layout.bundled) installBundled(context, gameRoot, layout)
+        if (layout == ControllerLayout.OCTOPAD) enableVanillaHelpers(gameRoot)
+    }
+
+    internal fun installBundled(context: Context, gameRoot: File, layout: ControllerLayout) {
+        val name = layout.addonFolder
+        val dest = File(gameRoot, "Interface/AddOns/$name")
+        if (layout == ControllerLayout.SHAGU && File(dest, "$name.toc").isFile) return
+        runCatching {
+            dest.deleteRecursively()
+            copyAssetDir(context, "addons/$name", dest)
+        }.onFailure { Timber.e(it, "Failed to install $name") }
+    }
+
+    /**
+     * OctoPad tells the app when a menu wants the pointer through VanillaHelpers' WriteFile. OctoWoW ships the
+     * DLL; this makes sure VanillaFixes loads it.
+     */
+    internal fun enableVanillaHelpers(gameRoot: File) {
+        val list = File(gameRoot, DLLS_TXT)
+        if (!list.isFile || !File(gameRoot, VANILLA_HELPERS).isFile) return
+        val lines = list.readLines()
+        if (lines.any { it.trim().equals(VANILLA_HELPERS, ignoreCase = true) }) return
+        val text = list.readText()
+        list.writeText(text + (if (text.isEmpty() || text.endsWith("\n")) "" else "\n") + VANILLA_HELPERS + "\n")
+        Timber.i("Added $VANILLA_HELPERS to $DLLS_TXT")
     }
 
     private fun copyAssetDir(context: Context, assetPath: String, dest: File) {
@@ -45,23 +98,37 @@ object MpqClient {
     }
 
     /**
-     * Gives the container a controller profile that turns gamepad input into the keyboard and mouse
-     * layout ShaguController binds (the Steam Deck "Keyboard (WASD) and Mouse" template). A profile the
-     * player already picked or edited is left alone.
+     * Gives the container the controller profile for the current layout, turning gamepad input into the
+     * keys its addon binds. Each layout has its own profile, so edits the player makes to one survive
+     * switching; a profile the player picked themselves is left alone.
      */
     fun applyControllerProfile(context: Context, container: Container) {
         // Load the stock profiles first: the manager only copies them into an empty profiles folder.
         InputControlsManager(context).getProfiles()
-        val file = ControlsProfile.getProfileFile(context, PROFILE_ID)
-        if (!file.isFile) file.writeText(controllerProfile().toString())
-        if (container.getExtra("profileId", "0") == "0") {
-            container.putExtra("profileId", PROFILE_ID.toString())
+        val layout = controllerLayout(context)
+        val file = ControlsProfile.getProfileFile(context, layout.profileId)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val versionKey = "profile_version_${layout.name}"
+        // Rewritten when our bindings change (version 2: the stick up/down codes were swapped).
+        if (!file.isFile || prefs.getInt(versionKey, 1) < PROFILE_VERSION) {
+            file.writeText(controllerProfile(layout).toString())
+            prefs.edit().putInt(versionKey, PROFILE_VERSION).apply()
+        }
+        val ours = setOf("0") + ControllerLayout.entries.map { it.profileId.toString() }
+        if (container.getExtra("profileId", "0") in ours && container.getExtra("profileId", "0") != layout.profileId.toString()) {
+            container.putExtra("profileId", layout.profileId.toString())
             container.saveData()
         }
     }
 
+    private fun bindings(layout: ControllerLayout) = when (layout) {
+        ControllerLayout.SHAGU -> SHAGU_BINDINGS
+        ControllerLayout.CONSOLE_EXPERIENCE -> CONSOLE_EXPERIENCE_BINDINGS
+        ControllerLayout.OCTOPAD -> OCTOPAD_BINDINGS
+    }
+
     // Android key codes for gamepad buttons, and the stick-direction pseudo codes the profiles use.
-    private val CONTROLLER_BINDINGS = listOf(
+    private val SHAGU_BINDINGS = listOf<Pair<Int, Any>>(
         96 to "KEY_SPACE", // A: jump
         97 to "KEY_E", // B: action button 3
         99 to "KEY_R", // X: action button 2
@@ -79,20 +146,92 @@ object MpqClient {
         20 to "KEY_DOWN",
         21 to "KEY_LEFT",
         22 to "KEY_RIGHT",
-        -3 to "KEY_W", // Left stick: move
-        -4 to "KEY_S",
-        -1 to "KEY_A",
-        -2 to "KEY_D",
-        -7 to "MOUSE_MOVE_UP", // Right stick: mouse
-        -8 to "MOUSE_MOVE_DOWN",
-        -5 to "MOUSE_MOVE_LEFT",
-        -6 to "MOUSE_MOVE_RIGHT",
+        LEFT_STICK_UP to "KEY_W", // Left stick: move
+        LEFT_STICK_DOWN to "KEY_S",
+        LEFT_STICK_LEFT to "KEY_A",
+        LEFT_STICK_RIGHT to "KEY_D",
+        RIGHT_STICK_UP to "MOUSE_MOVE_UP", // Right stick: mouse
+        RIGHT_STICK_DOWN to "MOUSE_MOVE_DOWN",
+        RIGHT_STICK_LEFT to "MOUSE_MOVE_LEFT",
+        RIGHT_STICK_RIGHT to "MOUSE_MOVE_RIGHT",
     )
 
+    // ConsoleExperience's documented layout: face buttons, D-pad and bumpers are 1-0, and the triggers are
+    // held Shift and Ctrl to reach its other three bars. Start is Shift+Escape, its radial menu.
+    private val CONSOLE_EXPERIENCE_BINDINGS = listOf<Pair<Int, Any>>(
+        96 to "KEY_1", // A
+        99 to "KEY_2", // X
+        100 to "KEY_3", // Y
+        97 to "KEY_4", // B
+        20 to "KEY_5", // D-pad down
+        21 to "KEY_6", // D-pad left
+        19 to "KEY_7", // D-pad up
+        22 to "KEY_8", // D-pad right
+        103 to "KEY_9", // RB
+        102 to "KEY_0", // LB
+        104 to "KEY_SHIFT_L", // LT: second bar
+        105 to "KEY_CTRL_L", // RT: third bar (both: fourth)
+        108 to listOf("KEY_SHIFT_L", "KEY_ESC"), // Start: radial menu
+        109 to "KEY_M", // Select: world map
+        106 to "MOUSE_LEFT_BUTTON", // L3
+        107 to "MOUSE_RIGHT_BUTTON", // R3: interact
+        110 to "OPEN_NAVIGATION_MENU",
+        LEFT_STICK_UP to "KEY_W",
+        LEFT_STICK_DOWN to "KEY_S",
+        LEFT_STICK_LEFT to "KEY_A",
+        LEFT_STICK_RIGHT to "KEY_D",
+        RIGHT_STICK_UP to "MOUSE_MOVE_UP",
+        RIGHT_STICK_DOWN to "MOUSE_MOVE_DOWN",
+        RIGHT_STICK_LEFT to "MOUSE_MOVE_LEFT",
+        RIGHT_STICK_RIGHT to "MOUSE_MOVE_RIGHT",
+    )
+
+    // OctoPad reads every button as its own key and works out layers, modifiers and menus itself, the way
+    // WoW Forever's gamepad mode does. The left stick only moves (forward/back and strafe); the right stick
+    // is the camera, turning the character with it, or the pointer while a menu is open.
+    private val OCTOPAD_BINDINGS = listOf<Pair<Int, Any>>(
+        96 to "KEY_F1", // A
+        97 to "KEY_F2", // B
+        99 to listOf("INTERACT_CLICK", "KEY_F3"), // X: interact with what's in front of you
+        100 to "KEY_F4", // Y
+        19 to "KEY_F5", // D-pad up
+        22 to "KEY_F6", // D-pad right
+        20 to "KEY_F7", // D-pad down
+        21 to "KEY_F8", // D-pad left
+        102 to "KEY_F9", // LB
+        103 to "KEY_F10", // RB
+        104 to "KEY_F11", // LT
+        105 to "KEY_F12", // RT
+        106 to "KEY_KP_DIVIDE", // L3
+        107 to "KEY_KP_MULTIPLY", // R3
+        108 to "KEY_KP_SUBTRACT", // Start: radial menu
+        109 to "POINTER_MODE", // Select: pointer, like the touchpad
+        110 to "OPEN_NAVIGATION_MENU",
+        LEFT_STICK_UP to "KEY_W",
+        LEFT_STICK_DOWN to "KEY_S",
+        LEFT_STICK_LEFT to "KEY_Q",
+        LEFT_STICK_RIGHT to "KEY_E",
+        RIGHT_STICK_UP to "CAMERA_LOOK_UP",
+        RIGHT_STICK_DOWN to "CAMERA_LOOK_DOWN",
+        RIGHT_STICK_LEFT to "CAMERA_LOOK_LEFT",
+        RIGHT_STICK_RIGHT to "CAMERA_LOOK_RIGHT",
+    )
+
+    // Stick directions as ExternalControllerBinding reports them. Android's Y axes grow downwards, so the
+    // "negative" codes are the stick pushed down.
+    private const val LEFT_STICK_LEFT = -1
+    private const val LEFT_STICK_RIGHT = -2
+    private const val LEFT_STICK_DOWN = -3
+    private const val LEFT_STICK_UP = -4
+    private const val RIGHT_STICK_LEFT = -5
+    private const val RIGHT_STICK_RIGHT = -6
+    private const val RIGHT_STICK_DOWN = -7
+    private const val RIGHT_STICK_UP = -8
+
     // id, name and cursorSpeed must come first: InputControlsManager reads them with a streaming parser.
-    private fun controllerProfile() = JSONObject().apply {
-        put("id", PROFILE_ID)
-        put("name", PROFILE_NAME)
+    private fun controllerProfile(layout: ControllerLayout) = JSONObject().apply {
+        put("id", layout.profileId)
+        put("name", layout.profileName)
         put("cursorSpeed", 1)
         put("elements", JSONArray())
         put(
@@ -104,8 +243,11 @@ object MpqClient {
                     put(
                         "controllerBindings",
                         JSONArray().apply {
-                            CONTROLLER_BINDINGS.forEach { (keyCode, binding) ->
-                                put(JSONObject().put("keyCode", keyCode).put("binding", binding))
+                            bindings(layout).forEach { (keyCode, binding) ->
+                                val entry = JSONObject().put("keyCode", keyCode)
+                                // A list is a key combo, pressed together.
+                                if (binding is List<*>) entry.put("bindings", JSONArray(binding)) else entry.put("binding", binding)
+                                put(entry)
                             }
                         },
                     )

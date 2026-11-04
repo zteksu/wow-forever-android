@@ -1,0 +1,17 @@
+<Bindings>
+  <Binding name="OCTOPAD_A" runOnUp="true" header="OCTOPAD">OctoPad_Button("A", keystate)</Binding>
+  <Binding name="OCTOPAD_B" runOnUp="true">OctoPad_Button("B", keystate)</Binding>
+  <Binding name="OCTOPAD_X" runOnUp="true">OctoPad_Button("X", keystate)</Binding>
+  <Binding name="OCTOPAD_Y" runOnUp="true">OctoPad_Button("Y", keystate)</Binding>
+  <Binding name="OCTOPAD_UP" runOnUp="true">OctoPad_Button("UP", keystate)</Binding>
+  <Binding name="OCTOPAD_RIGHT" runOnUp="true">OctoPad_Button("RIGHT", keystate)</Binding>
+  <Binding name="OCTOPAD_DOWN" runOnUp="true">OctoPad_Button("DOWN", keystate)</Binding>
+  <Binding name="OCTOPAD_LEFT" runOnUp="true">OctoPad_Button("LEFT", keystate)</Binding>
+  <Binding name="OCTOPAD_LB" runOnUp="true">OctoPad_Button("LB", keystate)</Binding>
+  <Binding name="OCTOPAD_RB" runOnUp="true">OctoPad_Button("RB", keystate)</Binding>
+  <Binding name="OCTOPAD_LT" runOnUp="true">OctoPad_Button("LT", keystate)</Binding>
+  <Binding name="OCTOPAD_RT" runOnUp="true">OctoPad_Button("RT", keystate)</Binding>
+  <Binding name="OCTOPAD_L3" runOnUp="true">OctoPad_Button("L3", keystate)</Binding>
+  <Binding name="OCTOPAD_R3" runOnUp="true">OctoPad_Button("R3", keystate)</Binding>
+  <Binding name="OCTOPAD_START" runOnUp="true">OctoPad_Button("START", keystate)</Binding>
+</Bindings>

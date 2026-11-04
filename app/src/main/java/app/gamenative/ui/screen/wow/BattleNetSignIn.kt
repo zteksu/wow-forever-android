@@ -69,8 +69,8 @@ object BattleNetSignIn {
     }
 
     fun removeLoginFile(gameRoot: File) {
-        // MPQ clients never get a login.txt, and their client folder is the game root, so leave its files alone.
-        if (BuildConfig.MPQ_CLIENT) return
+        // Only Blizzard clients get a login.txt; other games keep their files in the game root, so leave them alone.
+        if (!BuildConfig.BLIZZARD_CLIENT) return
         // Also clear the old product's folder, where a beta-era login.txt may have been left behind.
         listOf(WowClientDownloader.FLAVOR_DIR, BuildConfig.LEGACY_FLAVOR_DIR).filter { it.isNotBlank() }.forEach { dir ->
             try {
