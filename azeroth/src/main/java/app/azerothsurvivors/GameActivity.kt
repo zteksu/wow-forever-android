@@ -3,6 +3,14 @@ package app.azerothsurvivors
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.ContentValues
+import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Base64
+import android.webkit.ValueCallback
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
@@ -52,6 +60,37 @@ class GameActivity : ComponentActivity() {
         fun state(): String = padJson
     }
 
+    /** The game's Options → Saves page hands its .sav file over as a download; it's written to Download/. */
+    private inner class SaveFiles {
+        @JavascriptInterface
+        fun save(name: String, base64: String) {
+            val result = runCatching { writeDownload(name, Base64.decode(base64, Base64.DEFAULT)) }
+            runOnUiThread {
+                val text = result.fold({ "Saved to Download/$SAVE_FOLDER/$it" }, { "Couldn't save the file: ${it.message}" })
+                Toast.makeText(this@GameActivity, text, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun writeDownload(name: String, bytes: ByteArray): String {
+        val safe = name.replace(Regex("""[\\/:*?"<>|]"""), "_").ifBlank { "AzerothSurvivors.sav" }
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, safe)
+            put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+            put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$SAVE_FOLDER")
+        }
+        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: error("no Downloads folder")
+        contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("can't write")
+        return safe
+    }
+
+    // The game's "load a save" asks for a file; Android's picker answers it.
+    private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private val filePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        fileCallback?.onReceiveValue(uri?.let { arrayOf(it) })
+        fileCallback = null
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,8 +118,10 @@ class GameActivity : ComponentActivity() {
             builtInZoomControls = false
         }
         web.addJavascriptInterface(Bridge(), "AndroidPad")
+        web.addJavascriptInterface(SaveFiles(), "AndroidSaves")
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, PadState.BRIDGE_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
+            WebViewCompat.addDocumentStartJavaScript(web, SAVE_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
         }
         val offline = OfflineData.get(this)
         web.webViewClient = object : WebViewClient() {
@@ -98,6 +139,7 @@ class GameActivity : ComponentActivity() {
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                     view.evaluateJavascript(PadState.BRIDGE_SCRIPT, null)
+                    view.evaluateJavascript(SAVE_SCRIPT, null)
                 }
             }
 
@@ -111,6 +153,12 @@ class GameActivity : ComponentActivity() {
             }
         }
         web.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
+                fileCallback?.onReceiveValue(null)
+                fileCallback = callback
+                return runCatching { filePicker.launch(arrayOf("*/*")) }.onFailure { fileCallback = null }.isSuccess
+            }
+
             override fun onConsoleMessage(message: ConsoleMessage): Boolean {
                 Log.i("AzerothSurvivors", "${message.messageLevel()}: ${message.message()}")
                 return true
@@ -245,6 +293,32 @@ class GameActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val SAVE_FOLDER = "Azeroth Survivors"
+
+        /**
+         * Runs before the page's scripts. A link that downloads a blob (how the page hands over its .sav
+         * file) can't be fetched from outside the page, so its bytes go to [SaveFiles] instead.
+         */
+        private const val SAVE_SCRIPT = """
+(() => {
+  if (!window.AndroidSaves) return;
+  const click = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {
+    if (this.download && this.href && this.href.startsWith('blob:')) {
+      const name = this.download;
+      fetch(this.href).then((r) => r.arrayBuffer()).then((buf) => {
+        const bytes = new Uint8Array(buf);
+        let s = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        AndroidSaves.save(name, btoa(s));
+      }).catch((e) => console.warn('Save download failed', e));
+      return;
+    }
+    return click.call(this);
+  };
+})();
+"""
+
         fun open(context: android.content.Context) {
             context.startActivity(Intent(context, GameActivity::class.java))
         }
