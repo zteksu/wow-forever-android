@@ -26,8 +26,8 @@ android {
         // WebGPU in Android's WebView needs Android 12+.
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         buildConfigField("String", "GAME_URL", "\"https://wow.aethus.pl/\"")
         buildConfigField("String", "GAME_HOST", "\"wow.aethus.pl\"")
     }
