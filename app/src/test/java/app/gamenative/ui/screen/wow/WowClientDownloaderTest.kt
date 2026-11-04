@@ -85,34 +85,66 @@ class WowClientDownloaderTest {
     }
 
     @Test
-    fun migrateLegacyProduct_addsTargetRowClonedFromLegacy() {
-        assumeTrue(BuildConfig.BLIZZARD_CLIENT)
-        val legacy = MULTI_GAME_ROWS.keys.first { it != TARGET_PRODUCT }
-        val root = tempFolder.newFolder("legacy")
-        val buildInfo = File(root, ".build.info")
-        buildInfo.writeText(MULTI_GAME_HEADER + MULTI_GAME_ROWS.getValue(legacy))
+    fun installedProducts_listsBetaWhenForeverMissing() {
+        val buildInfo = File(tempFolder.newFolder("beta_only"), ".build.info")
+        buildInfo.writeText(BETA_BUILD_INFO)
 
-        assertTrue(WowClientDownloader.migrateLegacyProduct(root, legacy))
-
-        val result = WowClientDownloader.readBuildInfo(buildInfo)
-        assertEquals(TARGET_PRODUCT, result?.get("Product"))
-        // Same build as the legacy row, so the version check offers the update to the new client.
-        assertEquals(MULTI_GAME_VERSIONS.getValue(legacy), result?.get("Version"))
-        assertEquals(3, buildInfo.readLines().size)
-        assertTrue(File(root, ".build.info.bak").isFile)
-        assertFalse(WowClientDownloader.migrateLegacyProduct(root, legacy))
+        assertEquals(setOf("wow_classic_era", "wow_classic_beta"), WowClientDownloader.installedProducts(buildInfo))
+        assertEquals(emptySet<String>(), WowClientDownloader.installedProducts(File(tempFolder.root, "missing")))
     }
 
     @Test
-    fun migrateLegacyProduct_leavesOtherInstallsAlone() {
-        val root = tempFolder.newFolder("other")
+    fun upsertBuildInfo_addsForeverRowAndKeepsBetaRegion() {
+        assumeTrue(TARGET_PRODUCT == "wowf")
+        val root = tempFolder.newFolder("beta_upgrade")
         val buildInfo = File(root, ".build.info")
-        val original = MULTI_GAME_HEADER + MULTI_GAME_ROWS.getValue("wow_classic_era")
-        buildInfo.writeText(original)
+        buildInfo.writeText(BETA_BUILD_INFO)
 
-        assertFalse(WowClientDownloader.migrateLegacyProduct(root, "wow_classic_beta"))
-        assertFalse(WowClientDownloader.migrateLegacyProduct(root, ""))
-        assertEquals(original, buildInfo.readText())
+        WowClientDownloader.upsertBuildInfo(buildInfo, TARGET)
+
+        val lines = buildInfo.readLines()
+        assertEquals(4, lines.size)
+        assertEquals(BETA_BUILD_INFO.lines().take(3), lines.take(3))
+        val row = WowClientDownloader.readBuildInfo(buildInfo)!!
+        assertEquals("wowf", row["Product"])
+        assertEquals("eu", row["Branch"])
+        assertEquals("1", row["Active"])
+        assertEquals("1.60.1.70658", row["Version"])
+        assertEquals("165410aca770316ea0f88100bb4830c2", row["Build Key"])
+        assertEquals("f0fcf03baf658e38f2f6c96a77798a2c", row["CDN Key"])
+        assertEquals("level3.blizzard.com us.cdn.blizzard.com", row["CDN Hosts"])
+        assertEquals("http://level3.blizzard.com/?maxhosts=8 https://us.cdn.blizzard.com/?maxhosts=4&fallback=1", row["CDN Servers"])
+        assertEquals("Windows arm64 EU? enUS speech?:Windows arm64 EU? enUS text?", row["Tags"])
+    }
+
+    @Test
+    fun upsertBuildInfo_createsFileForFreshInstall() {
+        assumeTrue(TARGET_PRODUCT == "wowf")
+        val buildInfo = File(tempFolder.newFolder("fresh"), ".build.info")
+
+        WowClientDownloader.upsertBuildInfo(buildInfo, TARGET)
+
+        val lines = buildInfo.readLines()
+        assertEquals(2, lines.size)
+        assertEquals(15, lines[0].split("|").size)
+        assertEquals(15, lines[1].split("|").size)
+        val row = WowClientDownloader.readBuildInfo(buildInfo)!!
+        assertEquals("wowf", row["Product"])
+        assertEquals("tpr/wow", row["CDN Path"])
+        assertEquals("1.60.1.70658", row["Version"])
+    }
+
+    @Test
+    fun upsertBuildInfo_updatesExistingForeverRowInPlace() {
+        assumeTrue(TARGET_PRODUCT == "wowf")
+        val buildInfo = File(tempFolder.newFolder("update"), ".build.info")
+        WowClientDownloader.upsertBuildInfo(buildInfo, TARGET.copy(remoteVersion = "1.60.1.70000", remoteBuildConfig = "0".repeat(32)))
+
+        WowClientDownloader.upsertBuildInfo(buildInfo, TARGET)
+
+        assertEquals(2, buildInfo.readLines().size)
+        assertEquals("1.60.1.70658", WowClientDownloader.readBuildInfo(buildInfo)?.get("Version"))
+        assertEquals("165410aca770316ea0f88100bb4830c2", WowClientDownloader.readBuildInfo(buildInfo)?.get("Build Key"))
     }
 
     @Test
@@ -130,6 +162,22 @@ class WowClientDownloaderTest {
             "wow_classic_beta" to "us|1|77777777777777777777777777777777|88888888888888888888888888888888|99999999999999999999999999999999|10000|tpr/wow|level3.blizzard.com|?|1|1.60.1.61118|wow_classic_beta\n",
             "wowf" to "us|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|cccccccccccccccccccccccccccccccc|10000|tpr/wow|level3.blizzard.com|?|1|1.60.1.70630|wowf\n",
         )
+        val BETA_BUILD_INFO =
+            "Branch!STRING:0|Active!DEC:1|Build Key!HEX:16|CDN Key!HEX:16|Install Key!HEX:16|IM Size!DEC:4|CDN Path!STRING:0|CDN Hosts!STRING:0|CDN Servers!STRING:0|Tags!STRING:0|Version!STRING:0|Product!STRING:0\n" +
+                "eu|1|77777777777777777777777777777777|88888888888888888888888888888888|||tpr/wow|level3.blizzard.com|http://level3.blizzard.com/?maxhosts=8|OSX x86_64 EU? enUS speech?|1.15.9.70003|wow_classic_era\n" +
+                "eu|1|99999999999999999999999999999999|88888888888888888888888888888888|||tpr/wow|level3.blizzard.com|http://level3.blizzard.com/?maxhosts=8|OSX x86_64 EU? enUS speech?|1.60.1.70205|wow_classic_beta\n"
+
+        val TARGET = WowClientDownloader.VersionCheckResult(
+            localVersion = "",
+            remoteVersion = "1.60.1.70658",
+            isOutdated = true,
+            remoteBuildConfig = "165410aca770316ea0f88100bb4830c2",
+            remoteCdnConfig = "f0fcf03baf658e38f2f6c96a77798a2c",
+            remoteCdnHosts = listOf("level3.blizzard.com", "us.cdn.blizzard.com"),
+            remoteCdnPath = "tpr/wow",
+            remoteCdnServers = listOf("http://level3.blizzard.com/?maxhosts=8", "https://us.cdn.blizzard.com/?maxhosts=4&fallback=1"),
+        )
+
         val MULTI_GAME_VERSIONS = mapOf("wow" to "11.0.7.58238", "wow_classic_era" to "1.15.5.58238", "wow_classic_beta" to "1.60.1.61118", "wowf" to "1.60.1.70630")
     }
 }

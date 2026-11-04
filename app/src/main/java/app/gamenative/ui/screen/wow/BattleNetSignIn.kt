@@ -68,6 +68,7 @@ object BattleNetSignIn {
         }
     }
 
+    // Also clears a login.txt left in the beta folder, which the full release no longer reads.
     fun removeLoginFile(gameRoot: File) {
         // Only Blizzard clients get a login.txt; other games keep their files in the game root, so leave them alone.
         if (!BuildConfig.BLIZZARD_CLIENT) return
@@ -89,7 +90,8 @@ object BattleNetSignIn {
         CoroutineScope(Dispatchers.IO).launch {
             val hotfixLog = File(File(gameRoot, WowClientDownloader.FLAVOR_DIR), "Logs/Hotfix.log")
             hotfixLog.delete()
-            val deadline = System.currentTimeMillis() + 180_000L
+            // A fresh install's first boot streams assets and plays the intro cinematic before reaching the login screen.
+            val deadline = System.currentTimeMillis() + 600_000L
             while (isActive && System.currentTimeMillis() < deadline) {
                 delay(1000L)
                 if (hotfixLog.exists() && hotfixLog.length() > 50_000L) {
