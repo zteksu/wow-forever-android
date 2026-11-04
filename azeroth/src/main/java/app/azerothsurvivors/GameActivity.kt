@@ -3,6 +3,9 @@ package app.azerothsurvivors
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
+import android.view.inputmethod.InputMethodManager
+import androidx.core.view.ViewCompat
 import android.content.ContentValues
 import android.net.Uri
 import android.os.Environment
@@ -84,6 +87,34 @@ class GameActivity : ComponentActivity() {
         return safe
     }
 
+    /**
+     * The game keeps a hidden textarea focused while one of its text fields takes text, and hands focus
+     * back to it after every tap: on a touchscreen that would open the keyboard on each tap. So its text
+     * boxes ask for no on-screen keyboard ([KEYBOARD_SCRIPT]), and a ⌨ button, shown while a field takes
+     * text, opens it on purpose.
+     */
+    private inner class Keyboard {
+        @JavascriptInterface
+        fun wants(on: Boolean) {
+            runOnUiThread { keyboardButton.visibility = if (on) View.VISIBLE else View.GONE }
+        }
+    }
+
+    private lateinit var keyboardButton: TextView
+    private var keyboardOpen = false
+
+    private fun setKeyboard(open: Boolean) {
+        keyboardOpen = open
+        web.evaluateJavascript("window.__androidKeyboard && window.__androidKeyboard($open)", null)
+        val imm = getSystemService(InputMethodManager::class.java)
+        if (open) {
+            web.requestFocus()
+            web.postDelayed({ imm?.showSoftInput(web, InputMethodManager.SHOW_IMPLICIT) }, 150)
+        } else {
+            imm?.hideSoftInputFromWindow(web.windowToken, 0)
+        }
+    }
+
     // The game's "load a save" asks for a file; Android's picker answers it.
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private val filePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -119,9 +150,11 @@ class GameActivity : ComponentActivity() {
         }
         web.addJavascriptInterface(Bridge(), "AndroidPad")
         web.addJavascriptInterface(SaveFiles(), "AndroidSaves")
+        web.addJavascriptInterface(Keyboard(), "AndroidKeyboard")
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, PadState.BRIDGE_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
             WebViewCompat.addDocumentStartJavaScript(web, SAVE_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
+            WebViewCompat.addDocumentStartJavaScript(web, KEYBOARD_SCRIPT, setOf("https://${BuildConfig.GAME_HOST}"))
         }
         val offline = OfflineData.get(this)
         web.webViewClient = object : WebViewClient() {
@@ -140,6 +173,7 @@ class GameActivity : ComponentActivity() {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                     view.evaluateJavascript(PadState.BRIDGE_SCRIPT, null)
                     view.evaluateJavascript(SAVE_SCRIPT, null)
+                    view.evaluateJavascript(KEYBOARD_SCRIPT, null)
                 }
             }
 
@@ -166,13 +200,34 @@ class GameActivity : ComponentActivity() {
         }
 
         loading = buildLoading()
-        setContentView(
-            FrameLayout(this).apply {
-                setBackgroundColor(Color.BLACK)
-                addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                addView(loading, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-            },
-        )
+        keyboardButton = TextView(this).apply {
+            text = "⌨"
+            textSize = 26f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.argb(150, 0, 0, 0))
+                setStroke(3, Color.argb(200, 229, 193, 88))
+            }
+            contentDescription = "Keyboard"
+            visibility = View.GONE
+            setOnClickListener { setKeyboard(!keyboardOpen) }
+        }
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(loading, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            val size = (56 * resources.displayMetrics.density).toInt()
+            val margin = (16 * resources.displayMetrics.density).toInt()
+            addView(keyboardButton, FrameLayout.LayoutParams(size, size, Gravity.TOP or Gravity.END).apply { setMargins(margin, margin, margin, margin) })
+        }
+        setContentView(root)
+        // Closing the keyboard (back, or its own button) goes back to taps not opening it.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            if (keyboardOpen && !insets.isVisible(WindowInsetsCompat.Type.ime())) setKeyboard(false)
+            insets
+        }
 
         onBackPressedDispatcher.addCallback(
             this,
@@ -316,6 +371,47 @@ class GameActivity : ComponentActivity() {
     }
     return click.call(this);
   };
+})();
+"""
+
+        /**
+         * Runs before the page's scripts: text boxes ask for no on-screen keyboard unless the ⌨ button
+         * opened it, and the game's "a field takes text" signal (window.__rogue_ime.typing) is passed on
+         * to [Keyboard] so the button shows only then.
+         */
+        private const val KEYBOARD_SCRIPT = """
+(() => {
+  if (!window.AndroidKeyboard) return;
+  let open = false;
+  const apply = () => {
+    for (const el of document.querySelectorAll('textarea, input:not([type=file])')) el.inputMode = open ? 'text' : 'none';
+  };
+  new MutationObserver(apply).observe(document.documentElement, { childList: true, subtree: true });
+  window.__androidKeyboard = (show) => {
+    open = !!show;
+    apply();
+    const el = document.activeElement;
+    if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) {
+      el.blur();
+      el.focus({ preventScroll: true });
+    }
+  };
+  let ime;
+  Object.defineProperty(window, '__rogue_ime', {
+    configurable: true,
+    get() { return ime; },
+    set(value) {
+      ime = value;
+      if (value && typeof value.typing === 'function') {
+        const typing = value.typing.bind(value);
+        value.typing = (on, x, y) => {
+          AndroidKeyboard.wants(!!on);
+          if (!on && open) window.__androidKeyboard(false);
+          return typing(on, x, y);
+        };
+      }
+    },
+  });
 })();
 """
 
