@@ -39,30 +39,60 @@ object OfflineImport {
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
     @Volatile private var process: Process? = null
+    @Volatile private var cancelled = false
+
+    /** Where the site's download goes, so the game's server is asked for it only once. */
+    const val DOWNLOAD_URL = "https://wow.aethus.pl/download/AzerothSurvivorsWindowsNew.rar"
+
+    private fun rarFile(context: Context) = File(context.filesDir, "offline/download.rar")
 
     /**
-     * Unpacks the .rar the player picked. The app has no storage permission, so bsdtar reads it through
-     * this process's open file (/proc/<pid>/fd/<n>), which it can open as the same app.
+     * Downloads the Windows build from the game's site into the app's own storage, carrying on from
+     * where an interrupted download stopped, and unpacks it.
      */
-    fun fromRar(context: Context, offline: OfflineData, rar: Uri) = run("Unpacking the Windows download...") {
+    fun fromSite(context: Context, offline: OfflineData) = run("Downloading the Windows build...") {
+        val rar = rarFile(context).apply { parentFile?.mkdirs() }
+        val done = File(rar.path + ".done")
+        if (!done.exists()) download(DOWNLOAD_URL, rar)
+        done.createNewFile()
+        // Kept until it has unpacked, so a retry doesn't download it again.
+        unpack(context, offline, rar)
+        rar.delete()
+        done.delete()
+    }
+
+    /**
+     * Unpacks the .rar the player picked. bsdtar runs as its own program and can't open files through
+     * the app's file picker, so the .rar is copied into the app's storage first.
+     */
+    fun fromRar(context: Context, offline: OfflineData, uri: Uri) = run("Copying the Windows download...") {
+        val rar = rarFile(context).apply { parentFile?.mkdirs() }
+        try {
+            val size = context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: -1L
+            ensureSpace(rar.parentFile!!, if (size > 0) size * 21 / 10 else 0)
+            val input = context.contentResolver.openInputStream(uri) ?: throw IOException("Can't open the file")
+            input.use { src -> rar.outputStream().use { dst -> copyWithProgress(src, dst, size) } }
+            unpack(context, offline, rar)
+        } finally {
+            rar.delete()
+        }
+    }
+
+    private suspend fun unpack(context: Context, offline: OfflineData, rar: File) {
         val bsdtar = File(context.applicationInfo.nativeLibraryDir, "libbsdtar.so")
         if (!bsdtar.isFile) throw IOException("The unpacking tool isn't in this build")
         val staging = File(context.filesDir, "offline/unpacking").apply { deleteRecursively(); mkdirs() }
-        val pfd = context.contentResolver.openFileDescriptor(rar, "r") ?: throw IOException("Can't open the file")
         try {
-            val size = pfd.statSize.takeIf { it > 0 } ?: throw IOException("Can't read the file's size")
-            val free = StatFs(staging.path).availableBytes
-            if (free < size * 11 / 10) {
-                throw IOException("Not enough space: about ${gb(size * 11 / 10)} GB needed, ${gb(free)} GB free")
-            }
-            val source = "/proc/${android.os.Process.myPid()}/fd/${pfd.fd}"
-            val proc = ProcessBuilder(bsdtar.path, "-x", "-f", source, "-C", staging.path).redirectErrorStream(true).start()
+            val size = rar.length()
+            ensureSpace(staging, size * 11 / 10)
+            _state.value = State(running = true, progress = 0f, status = "Unpacking the Windows download...")
+            val proc = ProcessBuilder(bsdtar.path, "-x", "-f", rar.path, "-C", staging.path).redirectErrorStream(true).start()
             process = proc
             val output = StringBuilder()
             val reader = Thread { proc.inputStream.bufferedReader().forEachLine { if (output.length < 2000) output.appendLine(it) } }.apply { start() }
             while (proc.isAlive) {
-                val done = staging.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-                _state.value = _state.value.copy(progress = (done.toFloat() / size).coerceIn(0f, 0.99f))
+                val unpacked = staging.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                _state.value = _state.value.copy(progress = (unpacked.toFloat() / size).coerceIn(0f, 0.99f))
                 delay(500)
             }
             reader.join()
@@ -70,17 +100,63 @@ object OfflineImport {
             if (proc.exitValue() != 0) throw IOException("Couldn't unpack it (exit ${proc.exitValue()}): ${output.toString().take(300)}")
 
             val archives = MpqOrder.archivesIn(staging)
-            if (archives.isEmpty()) throw IOException("No Data/*.MPQ in it. Is this the Azeroth Survivors Windows download?")
+            if (archives.isEmpty()) throw IOException("No .MPQ archives in it. Is this the Azeroth Survivors Windows download?")
             replaceArchives(offline) { dir ->
                 for (file in archives) {
                     if (!file.renameTo(File(dir, file.name))) file.copyTo(File(dir, file.name), overwrite = true)
                 }
             }
         } finally {
-            pfd.close()
             staging.deleteRecursively()
         }
         check(offline)
+    }
+
+    private fun ensureSpace(dir: File, needed: Long) {
+        val free = StatFs(dir.path).availableBytes
+        if (free < needed) throw IOException("Not enough space: about ${gb(needed)} GB needed, ${gb(free)} GB free")
+    }
+
+    private suspend fun copyWithProgress(src: java.io.InputStream, dst: java.io.OutputStream, size: Long, startAt: Long = 0) {
+        val buffer = ByteArray(1 shl 16)
+        var copied = startAt
+        var lastUpdate = 0L
+        while (true) {
+            if (cancelled) throw IOException("Cancelled")
+            val n = src.read(buffer)
+            if (n < 0) break
+            dst.write(buffer, 0, n)
+            copied += n
+            if (size > 0 && copied - lastUpdate > (1 shl 22)) {
+                lastUpdate = copied
+                _state.value = _state.value.copy(progress = (copied.toFloat() / size).coerceIn(0f, 1f))
+            }
+        }
+    }
+
+    /** Downloads [url] into [target], resuming a partial file with a Range request when the server allows it. */
+    private suspend fun download(url: String, target: File) {
+        val have = if (target.isFile) target.length() else 0L
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 60_000
+            if (have > 0) setRequestProperty("Range", "bytes=$have-")
+        }
+        try {
+            val code = connection.responseCode
+            val resumed = code == 206 && have > 0
+            if (code == 429) throw IOException("The game's server is busy (too many players today). Try again later.")
+            if (code != 200 && !resumed) throw IOException("Download failed (HTTP $code)")
+            val length = connection.contentLengthLong
+            val total = if (resumed && length > 0) have + length else length
+            ensureSpace(target.parentFile!!, ((total - (if (resumed) have else 0)) + total * 11 / 10).coerceAtLeast(0))
+            connection.inputStream.use { src ->
+                java.io.FileOutputStream(target, resumed).use { dst -> copyWithProgress(src, dst, total, if (resumed) have else 0) }
+            }
+            if (total > 0 && target.length() != total) throw IOException("The download stopped early; tap again to carry on")
+        } finally {
+            connection.disconnect()
+        }
     }
 
     /** Copies .MPQ files the player picked (from an already unpacked download). */
@@ -109,6 +185,8 @@ object OfflineImport {
         offline.reopenArchives()
         offline.mpqDir.deleteRecursively()
         offline.matchesSite = true
+        File(offline.mpqDir.parentFile, "download.rar").delete()
+        File(offline.mpqDir.parentFile, "download.rar.done").delete()
         _state.value = State(status = "Removed the game data. The game will download what it needs again.")
     }
 
@@ -116,6 +194,7 @@ object OfflineImport {
     fun recheck(offline: OfflineData) = run("Checking the game data against the new version...") { check(offline) }
 
     fun cancel() {
+        cancelled = true
         process?.destroy()
     }
 
@@ -169,13 +248,14 @@ object OfflineImport {
 
     private fun run(status: String, block: suspend () -> Unit) {
         if (_state.value.running) return
+        cancelled = false
         _state.value = State(running = true, status = status)
         scope.launch {
             try {
                 block()
             } catch (e: Exception) {
                 Log.w(TAG, "Offline setup failed", e)
-                _state.value = State(error = if (isActive) e.message ?: "Failed" else "Cancelled")
+                _state.value = State(error = if (cancelled || !isActive) "Cancelled" else e.message ?: "Failed")
             }
         }
     }

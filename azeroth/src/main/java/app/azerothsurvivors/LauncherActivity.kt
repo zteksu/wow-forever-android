@@ -205,7 +205,7 @@ private fun OfflineCard() {
             when {
                 ready && !offline.matchesSite -> "Game data: ${gb(archiveSize)} from the Windows download (a different version from the site's; used when offline)."
                 ready -> "Game data: ${gb(archiveSize)} from the Windows download. Plays offline once it has started online once."
-                else -> "Import the Windows download (AzerothSurvivorsWindowsNew.rar from the site) to play without the internet."
+                else -> "Download the game's Windows build (0.75 GB, about 1.6 GB free space while it unpacks) to play without the internet, or import the .rar if you already have it."
             },
             fontSize = 11.sp,
             color = Color(0xFFCBD5E1),
@@ -222,7 +222,10 @@ private fun OfflineCard() {
             if (state.running) {
                 TextButton(onClick = { OfflineImport.cancel() }) { Text("CANCEL", color = Gold) }
             } else {
-                TextButton(onClick = { rarPicker.launch(arrayOf("*/*")) }) { Text(if (ready) "RE-IMPORT .RAR" else "IMPORT .RAR", color = Gold) }
+                TextButton(onClick = { OfflineImport.fromSite(context, offline) }) {
+                    Text(if (ready) "UPDATE FROM SITE" else "DOWNLOAD FROM SITE", color = Gold, fontWeight = FontWeight.Bold)
+                }
+                TextButton(onClick = { rarPicker.launch(arrayOf("*/*")) }) { Text("IMPORT .RAR", color = Gold) }
                 TextButton(onClick = { mpqPicker.launch(arrayOf("*/*")) }) { Text("IMPORT .MPQ FILES", color = Gold) }
                 if (ready) {
                     TextButton(onClick = { OfflineImport.remove(offline); refresh++ }) { Text("REMOVE", color = Muted) }
