@@ -341,6 +341,17 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
                                 .thenByDescending { it.first.downloads }
                                 .thenBy { it.first.title.lowercase() },
                         )
+                    val withUpdates = shown.filter { it.second == AddonManager.State.UPDATE_AVAILABLE }.map { it.first }
+                    if (withUpdates.size > 1) {
+                        TextButton(
+                            enabled = busy == null,
+                            onClick = {
+                                run("Updating ${withUpdates.size} add-ons", done = { "Updated ${withUpdates.size} add-ons" }) {
+                                    AddonManager.updateAll(context, gameRoot, withUpdates, reportProgress)
+                                }
+                            },
+                        ) { Text("UPDATE ALL (${withUpdates.size})", color = WowGold, fontSize = 12.sp) }
+                    }
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(shown, key = { it.first.name }) { (addon, state) ->
                             AddonRow(
@@ -433,7 +444,7 @@ private fun ActionButton(text: String, enabled: Boolean, onClick: () -> Unit) {
  * roughly how long is left. Before the size is known (or for actions without progress) the bar just moves.
  */
 @Composable
-private fun InstallProgress(label: String, progress: AddonManager.Progress?, startedAt: Long) {
+internal fun InstallProgress(label: String, progress: AddonManager.Progress?, startedAt: Long) {
     val fraction = progress?.fraction
     Text(progress?.step ?: label, color = WowGold, fontSize = 12.sp)
     Spacer(Modifier.height(4.dp))

@@ -110,6 +110,7 @@ import app.gamenative.ui.data.PerformanceHudConfig
 import app.gamenative.ui.data.PerformanceHudSize
 import app.gamenative.ui.data.XServerState
 import app.gamenative.GameSessionService
+import app.gamenative.ui.screen.wow.GameSessionStats
 import app.gamenative.ui.screen.wow.WowMachineIdentity
 import app.gamenative.ui.widget.PerformanceHudView
 import app.gamenative.utils.AssetUtils
@@ -959,6 +960,7 @@ fun XServerScreen(
                         if (!hasNonEssential) {
                             withContext(Dispatchers.Main) {
                                 exit(
+                                    context,
                                     winHandler,
                                     frameRating,
                                     container,
@@ -1367,7 +1369,7 @@ fun XServerScreen(
                     PluviaApp.xEnvironment?.resumeGameProcesses()
                 }
                 clearOverlayPauseState()
-                exit(xServerView!!.getxServer().winHandler, frameRating, container, appId, onExit, navigateBack, "quick_menu")
+                exit(context, xServerView!!.getxServer().winHandler, frameRating, container, appId, onExit, navigateBack, "quick_menu")
                 true
             }
 
@@ -1481,7 +1483,7 @@ fun XServerScreen(
     // Event handlers defined in composable scope to capture latest state on each recomposition
     val onActivityDestroyed: (AndroidEvent.ActivityDestroyed) -> Unit = {
         Timber.i("onActivityDestroyed")
-        exit(xServerView!!.getxServer().winHandler, frameRating, container, appId, onExit, navigateBack, "activity_destroyed")
+        exit(context, xServerView!!.getxServer().winHandler, frameRating, container, appId, onExit, navigateBack, "activity_destroyed")
     }
     val onKeyEvent: (AndroidEvent.KeyEvent) -> Boolean = {
         val isKeyboard = Keyboard.isKeyboardDevice(it.event.device)
@@ -1624,11 +1626,11 @@ fun XServerScreen(
     }
     val onGuestProgramTerminated: (AndroidEvent.GuestProgramTerminated) -> Unit = {
         Timber.i("onGuestProgramTerminated")
-        exit(xServerView!!.getxServer().winHandler, frameRating, container, appId, onExit, navigateBack, "guest_terminated")
+        exit(context, xServerView!!.getxServer().winHandler, frameRating, container, appId, onExit, navigateBack, "guest_terminated")
     }
     val onForceCloseApp: (AndroidEvent.ForceCloseApp) -> Unit = {
         Timber.i("onForceCloseApp")
-        exit(xServerView!!.getxServer().winHandler, frameRating, container, appId, onExit, navigateBack, "force_close")
+        exit(context, xServerView!!.getxServer().winHandler, frameRating, container, appId, onExit, navigateBack, "force_close")
     }
 
     DisposableEffect(Unit) {
@@ -2245,6 +2247,7 @@ fun XServerScreen(
                                 isOffline,
                             )
                             GameSessionService.ensureStarted(context.applicationContext)
+                            GameSessionStats.start(context)
 
                             if (!PluviaApp.isActivityInForeground && !neverSuspend) {
                                 PluviaApp.xEnvironment?.onPause()
@@ -3948,6 +3951,7 @@ private fun getWineStartCommand(
 private val LAUNCH_LOG_NOISE = listOf("I replace:", "evshim:")
 
 private fun exit(
+    context: Context,
     winHandler: WinHandler?,
     frameRating: FrameRating?,
     container: Container,
@@ -3962,6 +3966,9 @@ private fun exit(
         Timber.i("Exit already in progress, ignoring duplicate request")
         return
     }
+
+    // For the summary the launcher shows after the game closes.
+    GameSessionStats.finish(context, frameRating?.avgFPS ?: 0f, frameRating?.getFramePercentileMs(0.99) ?: 0)
 
     // Store session data in container metadata
     frameRating?.let { rating ->

@@ -272,14 +272,14 @@ object AddonManager {
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    private data class Record(val lastUpdated: String, val folders: List<String>)
+    private data class Record(val lastUpdated: String, val folders: List<String>, val curseModId: Int = 0)
 
     private fun record(context: Context, name: String): Record? =
         prefs(context).getString(name, null)?.let { json ->
             runCatching {
                 val o = JSONObject(json)
                 val folders = o.getJSONArray("folders").let { a -> (0 until a.length()).map { a.getString(it) } }
-                Record(o.optString("lastUpdated"), folders)
+                Record(o.optString("lastUpdated"), folders, o.optInt("curseModId"))
             }.getOrNull()
         }
 
@@ -288,7 +288,9 @@ object AddonManager {
         if (record == null) {
             editor.remove(name)
         } else {
-            editor.putString(name, JSONObject().put("lastUpdated", record.lastUpdated).put("folders", JSONArray(record.folders)).toString())
+            val json = JSONObject().put("lastUpdated", record.lastUpdated).put("folders", JSONArray(record.folders))
+            if (record.curseModId != 0) json.put("curseModId", record.curseModId)
+            editor.putString(name, json.toString())
         }
         editor.apply()
     }
@@ -390,11 +392,62 @@ object AddonManager {
             val folders = extractAddon(zip, addonsDir(gameRoot), addon.name) { part ->
                 onProgress(DOWNLOAD_SHARE + (1 - DOWNLOAD_SHARE) * part, unpack, 0, -1)
             }
-            saveRecord(context, addon.name, Record(addon.lastUpdated, folders))
+            saveRecord(context, addon.name, Record(addon.lastUpdated, folders, addon.curseModId))
             Timber.i("Installed addon ${addon.name} into $folders")
         } finally {
             zip.delete()
         }
+    }
+
+    // ---- Updates ----
+
+    /**
+     * The installed add-ons with a newer version: from this client's catalog, and from CurseForge for add-ons
+     * installed from there (when a key is set). A source that can't be reached is skipped.
+     */
+    fun findUpdates(context: Context, gameRoot: File): List<Addon> {
+        val catalog = runCatching { fetchCatalog(context) }.onFailure { Timber.w(it, "Add-on catalog check failed") }.getOrDefault(emptyList())
+        val curseIds = prefs(context).all.filterValues { it is String }.keys
+            .mapNotNull { record(context, it)?.curseModId?.takeIf { id -> id != 0 } }.distinct()
+        val curse = if (BuildConfig.MPQ_CLIENT || curseIds.isEmpty()) {
+            emptyList()
+        } else {
+            runCatching { CurseForge.mods(context, curseIds) }.onFailure { Timber.w(it, "CurseForge update check failed") }
+                .getOrDefault(emptyList())
+        }
+        return pendingUpdates(catalog + curse) { state(context, gameRoot, it) }
+    }
+
+    /** The add-ons in [candidates] that [stateOf] says have an update, once each. */
+    internal fun pendingUpdates(candidates: List<Addon>, stateOf: (Addon) -> State): List<Addon> =
+        candidates.distinctBy { it.name.lowercase() }.filter { stateOf(it) == State.UPDATE_AVAILABLE }
+
+    /** Updates each of [addons] in turn, reporting progress across all of them. */
+    fun updateAll(context: Context, gameRoot: File, addons: List<Addon>, onProgress: (Progress) -> Unit = {}) {
+        val failed = mutableListOf<String>()
+        addons.forEachIndexed { index, addon ->
+            try {
+                installOne(context, gameRoot, addon, {}) { part, step, bytes, total ->
+                    onProgress(Progress(part?.let { (index + it) / addons.size }, step, bytes, total))
+                }
+            } catch (e: Exception) {
+                // One add-on that can't be downloaded shouldn't stop the rest.
+                Timber.w(e, "Updating ${addon.name} failed")
+                failed += addon.title
+            }
+        }
+        if (failed.isNotEmpty()) throw IOException("Couldn't update ${failed.joinToString()}")
+    }
+
+    // When the launcher last checked for updates, so it checks at most every few hours (GitHub limits API calls).
+    private const val KEY_LAST_CHECK = "_last_update_check"
+    private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
+
+    fun isUpdateCheckDue(context: Context, now: Long = System.currentTimeMillis()): Boolean =
+        now - context.getSharedPreferences(SOURCES_PREFS, Context.MODE_PRIVATE).getLong(KEY_LAST_CHECK, 0) >= CHECK_INTERVAL_MS
+
+    fun markUpdateChecked(context: Context, now: Long = System.currentTimeMillis()) {
+        context.getSharedPreferences(SOURCES_PREFS, Context.MODE_PRIVATE).edit().putLong(KEY_LAST_CHECK, now).apply()
     }
 
     fun remove(context: Context, gameRoot: File, addon: Addon) {

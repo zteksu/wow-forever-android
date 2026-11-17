@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -65,6 +66,7 @@ import app.gamenative.ui.theme.WowError
 import app.gamenative.ui.theme.WowGold
 import app.gamenative.ui.theme.WowMuted
 import app.gamenative.ui.theme.WowSubtle
+import app.gamenative.ui.util.SnackbarManager
 import app.gamenative.utils.AppUpdater
 import app.gamenative.utils.StorageUtils
 import app.gamenative.utils.renderReleaseNotes
@@ -123,6 +125,17 @@ fun WoWForeverScreen(
     var graphicsDocuments by remember { mutableStateOf<File?>(null) }
     var showGraphicsDialog by remember { mutableStateOf(false) }
     var showDriversDialog by remember { mutableStateOf(false) }
+    // The last session's summary, shown once when the launcher comes back after the game closes.
+    var sessionSummary by remember { mutableStateOf<GameSessionStats.Summary?>(null) }
+    var sessionHistory by remember { mutableStateOf<List<GameSessionStats.Summary>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            GameSessionStats.takeUnseen(context)?.let { summary ->
+                sessionHistory = GameSessionStats.history(context)
+                sessionSummary = summary
+            }
+        }
+    }
     // The Turnip driver the next launch uses, shown under the edition line.
     var driverInUse by remember { mutableStateOf(DriverChoice.installed(context) ?: gpu.driver) }
     var showSavesDialog by remember { mutableStateOf(false) }
@@ -728,6 +741,10 @@ fun WoWForeverScreen(
                         Spacer(modifier = Modifier.height(10.dp))
                     }
 
+                    if ((BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) && !filesMissing && files.hasStorageAccess) {
+                        AddonUpdatesCard(gameRoot = File(gamePath), enabled = !isLaunching && !isUpdating)
+                    }
+
                     latestSave?.takeIf { !filesMissing }?.let { save ->
                         ContinueCard(save) { showSavesDialog = true }
                         Spacer(modifier = Modifier.height(10.dp))
@@ -843,6 +860,14 @@ fun WoWForeverScreen(
                         if (canInstallFromGog && !filesMissing) {
                             LinkButton("Install", Icons.Default.Download) { showGogInstall = true }
                         }
+                        LinkButton("Stats", Icons.Default.Timer) {
+                            scope.launch {
+                                val history = withContext(Dispatchers.IO) { GameSessionStats.history(context) }
+                                sessionHistory = history
+                                sessionSummary = history.firstOrNull()
+                                if (history.isEmpty()) SnackbarManager.show("No sessions yet. Stats appear after you play for a minute or more.")
+                            }
+                        }
                         LinkButton("View Logs", Icons.Default.Description) { showLogsDialog = true }
                     }
                 }
@@ -862,6 +887,10 @@ fun WoWForeverScreen(
                 hasSavedLogin = true
             },
         )
+    }
+
+    sessionSummary?.let { summary ->
+        SessionSummaryDialog(summary, sessionHistory) { sessionSummary = null }
     }
 
     if (showDriversDialog) {

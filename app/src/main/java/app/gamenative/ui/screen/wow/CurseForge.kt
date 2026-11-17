@@ -133,6 +133,15 @@ object CurseForge {
         return url
     }
 
+    /** The current version of each CurseForge mod in [ids], for checking installed add-ons for updates. */
+    fun mods(context: Context, ids: List<Int>): List<AddonManager.Addon> {
+        val key = apiKey(context) ?: return emptyList()
+        val type = versionTypeId(key)
+        return ids.mapNotNull { id ->
+            runCatching { get(key, "/mods/$id").optJSONObject("data") }.getOrNull()?.let { toAddon(it, type) }
+        }
+    }
+
     /** Addons [addon]'s file requires, ready to install. */
     fun requiredDependencies(context: Context, addon: AddonManager.Addon): List<AddonManager.Addon> {
         val key = apiKey(context) ?: return emptyList()
