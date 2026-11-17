@@ -1,5 +1,7 @@
 package app.gamenative.ui.screen.wow
 
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +61,7 @@ import app.gamenative.ui.theme.WowGold
 import app.gamenative.ui.theme.WowMuted
 import app.gamenative.ui.theme.WowSubtle
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -120,20 +123,36 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
             }
     }
 
-    fun run(label: String, action: suspend ((String) -> Unit) -> Unit) {
+    // [done] is the message left showing once the action succeeds; none by default.
+    fun run(label: String, done: () -> String? = { null }, action: suspend ((String) -> Unit) -> Unit) {
         if (busy != null) return
         busy = label
         status = null
         scope.launch {
             try {
                 withContext(Dispatchers.IO) { action { msg -> scope.launch(Dispatchers.Main) { status = msg } } }
-                status = null
+                status = done()
             } catch (e: Exception) {
                 Timber.e(e, "Addon action failed: $label")
                 status = "$label failed: ${e.message}"
             } finally {
                 busy = null
                 revision++
+            }
+        }
+    }
+
+    val zipPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        var installed = emptyList<String>()
+        run("Importing add-on", done = { "Installed ${installed.joinToString()}" }) {
+            val zip = File(context.cacheDir, "addon-import.zip")
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input -> zip.outputStream().use { input.copyTo(it) } }
+                    ?: throw IOException("Couldn't open the selected file")
+                installed = AddonImporter.install(zip, AddonManager.addonsDir(gameRoot))
+            } finally {
+                zip.delete()
             }
         }
     }
@@ -147,6 +166,12 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("ADD-ONS", color = WowGold, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                // Any add-on downloaded as a .zip, e.g. from a website the catalogue doesn't cover.
+                TextButton(
+                    enabled = busy == null,
+                    // Some file managers label zips as generic binary files, so both types are offered.
+                    onClick = { zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
+                ) { Text("IMPORT .ZIP", color = WowGold, fontSize = 12.sp) }
                 IconButton(onClick = onDismiss, enabled = busy == null) {
                     Icon(Icons.Default.Close, contentDescription = "Close", tint = WowMuted)
                 }
