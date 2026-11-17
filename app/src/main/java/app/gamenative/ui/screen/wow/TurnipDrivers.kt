@@ -39,10 +39,23 @@ object TurnipDrivers {
 
     data class Asset(val name: String, val url: String, val size: Long)
 
-    data class Installed(val name: String, val driverVersion: String, val description: String, val bundled: Boolean)
+    /** Where a downloaded driver came from, kept next to it so the app can offer that project's newer builds. */
+    data class Origin(val repo: String, val tag: String, val publishedAt: String, val asset: String)
+
+    data class Installed(
+        val name: String,
+        val driverVersion: String,
+        val description: String,
+        val bundled: Boolean,
+        val origin: Origin? = null,
+    )
+
+    /** A newer build of an installed driver, from the project it was downloaded from. */
+    data class Update(val driver: Installed, val release: Release, val asset: Asset)
 
     private const val MAX_RELEASES = 10
     private const val META = "meta.json"
+    private const val ORIGIN = "origin.json"
 
     fun driversDir(context: Context) = File(context.filesDir, "contents/adrenotools")
 
@@ -89,6 +102,7 @@ object TurnipDrivers {
                     driverVersion = meta.optString("driverVersion"),
                     description = meta.optString("description"),
                     bundled = folder.name in bundled,
+                    origin = readOrigin(File(folder, ORIGIN)),
                 )
             }
             .sortedWith(compareByDescending<Installed> { it.bundled }.thenBy { it.name.lowercase() })
@@ -120,12 +134,65 @@ object TurnipDrivers {
         }
     }
 
-    fun download(url: String, dir: File, bundled: Set<String>): String {
-        require(url.startsWith("https://")) { "Driver downloads must use HTTPS" }
-        Net.http.newCall(Request.Builder().url(url).build()).execute().use { response ->
+    /** Downloads and installs [asset] from [release], noting where it came from so updates can be found later. */
+    fun download(release: Release, asset: Asset, dir: File, bundled: Set<String>): String {
+        require(asset.url.startsWith("https://")) { "Driver downloads must use HTTPS" }
+        Net.http.newCall(Request.Builder().url(asset.url).build()).execute().use { response ->
             if (!response.isSuccessful) throw IOException("HTTP ${response.code} downloading the driver")
             val body = response.body ?: throw IOException("Empty download")
-            return body.byteStream().use { install(it, dir, bundled) }
+            val name = body.byteStream().use { install(it, dir, bundled) }
+            writeOrigin(File(File(dir, name), ORIGIN), Origin(release.repo, release.tag, release.publishedAt, asset.name))
+            return name
+        }
+    }
+
+    /**
+     * Newer builds of the downloaded drivers in [installed], from [releases] of the projects they came from: the
+     * newest full release of the same project published after the installed one, with the zip that matches the
+     * installed zip's name once version numbers are ignored (or the release's only zip).
+     */
+    internal fun updates(installed: List<Installed>, releases: List<Release>): List<Update> =
+        installed.mapNotNull { driver ->
+            val origin = driver.origin ?: return@mapNotNull null
+            val newest = releases.filter { it.repo == origin.repo && !it.prerelease }.maxByOrNull { it.publishedAt }
+                ?: return@mapNotNull null
+            if (newest.tag == origin.tag || newest.publishedAt <= origin.publishedAt) return@mapNotNull null
+            val asset = newest.assets.firstOrNull { assetFamily(it.name) == assetFamily(origin.asset) }
+                ?: newest.assets.singleOrNull()
+                ?: return@mapNotNull null
+            Update(driver, newest, asset)
+        }
+
+    /**
+     * A zip name without its version numbers, e.g. "turnip_v25.1.0_gen8.zip" and "turnip_v25.2.1_gen8.zip" match.
+     * Only v-prefixed or dotted numbers count as versions, so "gen7" and "gen8" stay apart.
+     */
+    internal fun assetFamily(name: String) = name.lowercase().replace(VERSION, "#")
+
+    private val VERSION = Regex("""v\d+(?:[._-]\d+)*|\d+(?:[._]\d+)+""")
+
+    /**
+     * The project to look in first for this GPU: whitebelyash's mainline builds cover Adreno 8xx (gen8), while
+     * K11MCH1's are the usual pick for Adreno 6xx and 7xx.
+     */
+    fun recommendedSource(adreno8xx: Boolean): Source = if (adreno8xx) SOURCES[0] else SOURCES[1]
+
+    private fun readOrigin(file: File): Origin? = runCatching {
+        if (!file.isFile) return null
+        val json = JSONObject(file.readText())
+        Origin(json.getString("repo"), json.getString("tag"), json.optString("publishedAt"), json.optString("asset"))
+    }.getOrNull()
+
+    private fun writeOrigin(file: File, origin: Origin) {
+        runCatching {
+            file.writeText(
+                JSONObject()
+                    .put("repo", origin.repo)
+                    .put("tag", origin.tag)
+                    .put("publishedAt", origin.publishedAt)
+                    .put("asset", origin.asset)
+                    .toString(),
+            )
         }
     }
 
@@ -158,4 +225,15 @@ object TurnipDrivers {
             }
         }
     }
+}
+
+/** The driver the next launch uses: a name in [TurnipDrivers.driversDir], or null for the GPU's recommended one. */
+object DriverChoice {
+    fun get(context: Context): String? = SkyrimGraphics.driver(context)
+
+    fun set(context: Context, driver: String?) = SkyrimGraphics.setDriver(context, driver)
+
+    /** The picked driver if it's still installed, else null. */
+    fun installed(context: Context): String? =
+        get(context)?.takeIf { File(TurnipDrivers.driversDir(context), "$it/meta.json").isFile }
 }

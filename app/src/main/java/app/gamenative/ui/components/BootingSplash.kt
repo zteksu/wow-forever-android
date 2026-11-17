@@ -109,6 +109,8 @@ fun BootingSplash(
     }
 
     val isWow = BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT
+    // With game art behind it, a WoW build shows the spinner too, and leaves the title to the art.
+    val hasBackdrop = hasGameBackdrop()
 
     AnimatedVisibility(
         visible = visible,
@@ -137,8 +139,8 @@ fun BootingSplash(
                 ) {
                     Spacer(modifier = Modifier.weight(0.4f))
 
-                    if (!isWow) {
-                        SpinnerSplash(progress)
+                    if (!isWow || hasBackdrop) {
+                        SpinnerSplash(progress, showTitle = !isWow)
                     } else {
                         Text(
                             text = "World of Warcraft",
@@ -215,10 +217,10 @@ fun BootingSplash(
     }
 }
 
-/** The loading screen for the non-WoW games: the game's title over a spinning wheel. */
+/** The loading screen for the non-WoW games, and WoW builds with game art: the game's title over a spinning wheel. */
 @Composable
-private fun SpinnerSplash(progress: Float) {
-    Text(
+private fun SpinnerSplash(progress: Float, showTitle: Boolean = true) {
+    if (showTitle) Text(
         text = BuildConfig.LAUNCHER_TITLE,
         style = MaterialTheme.typography.displaySmall.copy(
             fontFamily = FontFamily.Serif,
@@ -230,7 +232,7 @@ private fun SpinnerSplash(progress: Float) {
         color = Color(0xFFE8E4DC),
     )
 
-    Spacer(modifier = Modifier.height(28.dp))
+    if (showTitle) Spacer(modifier = Modifier.height(28.dp))
 
     val spinnerColor = Color(0xFFE8E4DC)
     val trackColor = Color.White.copy(alpha = 0.15f)

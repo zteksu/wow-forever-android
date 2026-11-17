@@ -102,6 +102,14 @@ jobs:
         if: steps.release.outputs.flavor != 'azeroth'
         run: tools/fetch_components.sh
 
+      # WoW Forever and Retail run the native ARM64 client, which never uses Proton's 32-bit Windows half (also what
+      # antivirus engines flag). OctoWoW's client is 32-bit and the other games may run 32-bit helpers, so they keep it.
+      - name: Remove 32-bit Windows files from Proton
+        if: steps.release.outputs.flavor == 'forever' || steps.release.outputs.flavor == 'retail'
+        run: |
+          command -v zstd > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq zstd > /dev/null; }
+          python3 tools/trim_proton_i386.py app/src/main/assets/bundled_components/proton-11.0-90624-arm64ec.wcp
+
       - name: Set up release signing
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

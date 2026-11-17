@@ -293,7 +293,7 @@ object AddonManager {
         editor.apply()
     }
 
-    private fun addonsDir(gameRoot: File) =
+    internal fun addonsDir(gameRoot: File) =
         File(if (BuildConfig.FLAVOR_DIR.isEmpty()) gameRoot else File(gameRoot, BuildConfig.FLAVOR_DIR), "Interface/AddOns")
 
     fun state(context: Context, gameRoot: File, addon: Addon): State {
