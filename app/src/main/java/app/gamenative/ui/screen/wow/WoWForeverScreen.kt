@@ -1378,10 +1378,6 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
     }
 
     val arm64Exe = File(gameRoot, "$FLAVOR_DIR/$EXE_NAME")
-    BattleNetSignIn.load(context)?.let { login ->
-        BattleNetSignIn.writeLoginFile(gameRoot, login)
-        BattleNetSignIn.startLoginWatcher(gameRoot)
-    }
     if (!arm64Exe.exists()) {
         try {
             WowClientDownloader.download(gameRoot, GameRegion.current(context, gameRoot.path).cdnRegion, onStatus)
@@ -1428,6 +1424,11 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
             onStatus("Backing up saves...")
             runCatching { SkyrimSaves.backUp(gameRoot) }.onFailure { e -> Timber.w(e, "Couldn't back up Skyrim saves") }
         }
+    }
+    // Written last, so the password isn't on disk during the client download or container setup.
+    BattleNetSignIn.load(context)?.let { login ->
+        BattleNetSignIn.writeLoginFile(gameRoot, login)
+        BattleNetSignIn.startLoginWatcher(gameRoot)
     }
     return CONTAINER_ID
 }
