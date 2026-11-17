@@ -42,7 +42,7 @@ class WowClientDownloaderTest {
             "us|1|9d5b7a136208535a8dfbc971489e8ae8|b1f5f5904d9c7cb3241bc6eeea50cce8|f68b323351f044ef3c9902641775796b|10332|tpr/wow|level3.blizzard.com|?|1|1.15.5.58238|wow_classic_era\n"
         )
 
-        val result = WowClientDownloader.checkVersion(root)
+        val result = WowClientDownloader.checkVersion(root, "us")
         assertNull(result)
     }
 
@@ -71,7 +71,7 @@ class WowClientDownloaderTest {
         val result = WowClientDownloader.readBuildInfo(buildInfo)
         assertNotNull(result)
         assertNotEquals(TARGET_PRODUCT, result?.get("Product"))
-        val check = WowClientDownloader.checkVersion(root)
+        val check = WowClientDownloader.checkVersion(root, "us")
         assertNull(check)
     }
 
@@ -115,6 +115,30 @@ class WowClientDownloaderTest {
         assertEquals("level3.blizzard.com us.cdn.blizzard.com", row["CDN Hosts"])
         assertEquals("http://level3.blizzard.com/?maxhosts=8 https://us.cdn.blizzard.com/?maxhosts=4&fallback=1", row["CDN Servers"])
         assertEquals("Windows arm64 EU? enUS speech?:Windows arm64 EU? enUS text?", row["Tags"])
+    }
+
+    @Test
+    fun regionRow_picksTheRequestedRegionsBuild() {
+        val rows = listOf("us" to "70888", "eu" to "70888", "kr" to "70862", "tw" to "70862").map { (region, build) ->
+            mapOf("Region" to region, "BuildId" to build)
+        }
+
+        assertEquals("70862", WowClientDownloader.regionRow(rows, "Region", "kr")?.get("BuildId"))
+        assertEquals("eu", WowClientDownloader.regionRow(rows, "Region", "EU")?.get("Region"))
+        assertEquals("us", WowClientDownloader.regionRow(rows, "Region", "cn")?.get("Region"))
+        assertNull(WowClientDownloader.regionRow(emptyList(), "Region", "us"))
+    }
+
+    @Test
+    fun upsertBuildInfo_usesTheTargetsRegionForANewRow() {
+        val buildInfo = File(tempFolder.newFolder("fresh_kr"), ".build.info")
+        buildInfo.writeText(BETA_BUILD_INFO)
+
+        WowClientDownloader.upsertBuildInfo(buildInfo, TARGET.copy(region = "kr"))
+
+        val row = WowClientDownloader.readBuildInfo(buildInfo)!!
+        assertEquals("kr", row["Branch"])
+        assertEquals("Windows arm64 KR? enUS speech?:Windows arm64 KR? enUS text?", row["Tags"])
     }
 
     @Test
