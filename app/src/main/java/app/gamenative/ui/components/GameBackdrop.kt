@@ -21,6 +21,14 @@ import app.gamenative.ui.theme.WowBackgroundGradient
  * a dark scrim so text stays readable, otherwise the theme gradient. Builds don't ship one by default;
  * game art can be dropped into `res/drawable` for a personal build.
  */
+/** Whether this build has a `game_backdrop` drawable. */
+@SuppressLint("DiscouragedApi")
+@Composable
+fun hasGameBackdrop(): Boolean {
+    val context = LocalContext.current
+    return remember { context.resources.getIdentifier("game_backdrop", "drawable", context.packageName) != 0 }
+}
+
 @SuppressLint("DiscouragedApi")
 @Composable
 fun GameBackdrop(modifier: Modifier = Modifier, scrim: Float = 0.55f, content: @Composable BoxScope.() -> Unit) {
