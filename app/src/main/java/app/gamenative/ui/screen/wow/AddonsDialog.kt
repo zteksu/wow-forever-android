@@ -1,7 +1,7 @@
 package app.gamenative.ui.screen.wow
 
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +31,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -60,13 +61,14 @@ import app.gamenative.ui.theme.WowError
 import app.gamenative.ui.theme.WowGold
 import app.gamenative.ui.theme.WowMuted
 import app.gamenative.ui.theme.WowSubtle
-import java.io.File
-import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.io.File
+import java.io.IOException
+import java.util.Locale
 
 /**
  * Browse, install, update and remove addons: OctoWoW's catalog (where the controller addon is also picked),
@@ -82,6 +84,10 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
     var installedOnly by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
+    var statusIsError by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf<AddonManager.Progress?>(null) }
+    // When the running action started, for the time-left estimate.
+    var startedAt by remember { mutableStateOf(0L) }
     var layout by remember { mutableStateOf(MpqClient.controllerLayout(context)) }
     var repoInput by remember { mutableStateOf("") }
     var curseKey by remember { mutableStateOf(CurseForge.apiKey(context)) }
@@ -128,6 +134,9 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
         if (busy != null) return
         busy = label
         status = null
+        statusIsError = false
+        progress = null
+        startedAt = System.currentTimeMillis()
         scope.launch {
             try {
                 withContext(Dispatchers.IO) { action { msg -> scope.launch(Dispatchers.Main) { status = msg } } }
@@ -135,12 +144,17 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
             } catch (e: Exception) {
                 Timber.e(e, "Addon action failed: $label")
                 status = "$label failed: ${e.message}"
+                statusIsError = true
             } finally {
                 busy = null
+                progress = null
                 revision++
             }
         }
     }
+
+    // Progress updates come from the download thread; the bar reads them on the main thread.
+    val reportProgress: (AddonManager.Progress) -> Unit = { p -> scope.launch(Dispatchers.Main) { if (busy != null) progress = p } }
 
     val zipPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -292,9 +306,14 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
                 FilterChip(selected = installedOnly, onClick = { installedOnly = !installedOnly }, label = { Text("Installed") })
             }
 
-            (busy ?: status)?.let {
+            if (busy != null) {
                 Spacer(Modifier.height(6.dp))
-                Text(it, color = if (busy == null) WowError else WowGold, fontSize = 12.sp)
+                InstallProgress(busy!!, progress, startedAt)
+            } else {
+                status?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, color = if (statusIsError) WowError else WowGold, fontSize = 12.sp)
+                }
             }
             Spacer(Modifier.height(8.dp))
 
@@ -328,7 +347,11 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
                                 addon = addon,
                                 state = state,
                                 enabled = busy == null,
-                                onInstall = { run("Installing ${addon.title}") { AddonManager.install(context, gameRoot, addon, list, it) } },
+                                onInstall = {
+                                    run("Installing ${addon.title}", done = { "Installed ${addon.title}" }) {
+                                        AddonManager.install(context, gameRoot, addon, list, it, reportProgress)
+                                    }
+                                },
                                 onRemove = { run("Removing ${addon.title}") { AddonManager.remove(context, gameRoot, addon) } },
                             )
                         }
@@ -403,4 +426,49 @@ private fun ActionButton(text: String, enabled: Boolean, onClick: () -> Unit) {
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
     ) { Text(text, fontSize = 12.sp) }
+}
+
+/**
+ * The running add-on action: a bar that fills as the download and unpacking go, with the size downloaded and
+ * roughly how long is left. Before the size is known (or for actions without progress) the bar just moves.
+ */
+@Composable
+private fun InstallProgress(label: String, progress: AddonManager.Progress?, startedAt: Long) {
+    val fraction = progress?.fraction
+    Text(progress?.step ?: label, color = WowGold, fontSize = 12.sp)
+    Spacer(Modifier.height(4.dp))
+    if (fraction != null) {
+        LinearProgressIndicator(
+            progress = { fraction.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().height(6.dp),
+            color = WowGold,
+            trackColor = Color(0xFF2A3A50),
+        )
+    } else {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(6.dp), color = WowGold, trackColor = Color(0xFF2A3A50))
+    }
+    val details = listOfNotNull(
+        fraction?.let { "${(it * 100).toInt()}%" },
+        progress?.takeIf { it.bytes > 0 }?.let { p ->
+            if (p.totalBytes > 0) "${megabytes(p.bytes)} of ${megabytes(p.totalBytes)}" else megabytes(p.bytes)
+        },
+        fraction?.let { timeLeft(it, System.currentTimeMillis() - startedAt) },
+    )
+    if (details.isNotEmpty()) {
+        Spacer(Modifier.height(2.dp))
+        Text(details.joinToString(" · "), color = WowSubtle, fontSize = 11.sp)
+    }
+}
+
+private fun megabytes(bytes: Long) = if (bytes < 1024 * 1024) "${bytes / 1024} KB" else String.format(Locale.US, "%.1f MB", bytes / 1048576.0)
+
+/** "about 12 s left" from how long the first [fraction] took, once there's enough to go on. */
+internal fun timeLeft(fraction: Float, elapsedMillis: Long): String? {
+    if (fraction < 0.05f || fraction >= 1f || elapsedMillis < 500) return null
+    val seconds = ((elapsedMillis / fraction) * (1 - fraction) / 1000).toLong()
+    return when {
+        seconds < 1 -> "almost done"
+        seconds < 60 -> "about $seconds s left"
+        else -> "about ${(seconds + 30) / 60} min left"
+    }
 }
