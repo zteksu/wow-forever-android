@@ -764,24 +764,24 @@ fun WoWForeverScreen(
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                     ) {
-                        LinkButton("Refresh Status", Icons.Default.Refresh) {
+                        LinkButton("Refresh", Icons.Default.Refresh) {
                             checkFiles()
                             checkVersionStatus()
                             checkAppUpdate()
                         }
                         if (!files.needsInstall) {
-                            LinkButton("Change Location", Icons.Default.FolderOpen) { folderPicker.launch(null) }
+                            LinkButton("Location", Icons.Default.FolderOpen) { folderPicker.launch(null) }
                         }
                         if (BuildConfig.BLIZZARD_CLIENT) {
                             LinkButton(
-                                text = if (hasSavedLogin) "Update Login" else "Configure Login",
+                                text = "Login",
                                 icon = Icons.Default.Key,
                             ) {
                                 showLoginDialog = true
                             }
                         }
                         if (hasSavedLogin && BuildConfig.BLIZZARD_CLIENT) {
-                            LinkButton("Forget Saved Login", Icons.Default.Delete) {
+                            LinkButton("Forget Login", Icons.Default.Delete) {
                                 BattleNetSignIn.forget(context)
                                 BattleNetSignIn.removeLoginFile(File(gamePath))
                                 hasSavedLogin = false
