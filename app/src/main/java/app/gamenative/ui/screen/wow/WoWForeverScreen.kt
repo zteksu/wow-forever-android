@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
@@ -42,6 +44,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -119,6 +122,9 @@ fun WoWForeverScreen(
     var showAddonsDialog by remember { mutableStateOf(false) }
     var graphicsDocuments by remember { mutableStateOf<File?>(null) }
     var showGraphicsDialog by remember { mutableStateOf(false) }
+    var showDriversDialog by remember { mutableStateOf(false) }
+    // The Turnip driver the next launch uses, shown under the edition line.
+    var driverInUse by remember { mutableStateOf(DriverChoice.installed(context) ?: gpu.driver) }
     var showSavesDialog by remember { mutableStateOf(false) }
     var latestSave by remember { mutableStateOf<SkyrimSaves.Save?>(null) }
     var savesVersion by remember { mutableStateOf(0) }
@@ -474,6 +480,14 @@ fun WoWForeverScreen(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(text = "${gpu.edition} Edition", fontSize = 11.sp, color = WowSubtle)
+                Text(
+                    text = "Driver: $driverInUse",
+                    fontSize = 11.sp,
+                    color = WowSubtle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable { showDriversDialog = true },
+                )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -807,6 +821,9 @@ fun WoWForeverScreen(
                         if (!filesMissing && (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT)) {
                             LinkButton("Add-ons", Icons.Default.Extension) { showAddonsDialog = true }
                         }
+                        if (BuildConfig.BLIZZARD_CLIENT || BuildConfig.MPQ_CLIENT) {
+                            LinkButton("Drivers", Icons.Default.Memory) { showDriversDialog = true }
+                        }
                         if (BuildConfig.MPQ_CLIENT && !filesMissing) {
                             LinkButton("Verify Game Files", Icons.Default.FactCheck) {
                                 if (!isUpdating && !isLaunching) performUpdate(verifyAll = true)
@@ -847,6 +864,18 @@ fun WoWForeverScreen(
         )
     }
 
+    if (showDriversDialog) {
+        DriversDialog(
+            recommended = gpu.driver,
+            gpuLabel = gpu.label,
+            adreno8xx = gpu.driver == ADRENO_8XX_DRIVER,
+            onDismiss = {
+                showDriversDialog = false
+                driverInUse = DriverChoice.installed(context) ?: gpu.driver
+            },
+        )
+    }
+
     if (showAddonsDialog) {
         AddonsDialog(gameRoot = File(gamePath), onDismiss = { showAddonsDialog = false })
     }
@@ -857,7 +886,10 @@ fun WoWForeverScreen(
             skseInstalled = File(gamePath, SkyrimConfig.SKSE_LOADER).isFile,
             recommendedDriver = gpu.driver,
             defaultResolution = gpu.screenSize,
-            onDismiss = { showGraphicsDialog = false },
+            onDismiss = {
+                showGraphicsDialog = false
+                driverInUse = DriverChoice.installed(context) ?: gpu.driver
+            },
         )
     }
 
@@ -1416,10 +1448,8 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, scr
     onStatus("Configuring ${gpu.label} container...")
     val containerManager = ContainerManager(context)
     val launch = SkyrimGraphics.launch(context)
-    // A driver picked in Options, if it's still installed; otherwise the one recommended for this GPU.
-    val chosenDriver = launch.driver?.takeIf {
-        !BuildConfig.BLIZZARD_CLIENT && !BuildConfig.MPQ_CLIENT && File(TurnipDrivers.driversDir(context), "$it/meta.json").isFile
-    }
+    // A driver picked in Drivers (or Skyrim's Options), if it's still installed; otherwise the one recommended for this GPU.
+    val chosenDriver = DriverChoice.installed(context)
     val config = containerConfig(gameRoot, chosenDriver?.let { gpu.copy(driver = it) } ?: gpu, screenSize, launch, WowMachineIdentity.load(context))
     val container = containerManager.getContainerById(CONTAINER_ID)
     if (container == null) {

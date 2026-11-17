@@ -296,6 +296,16 @@ object SkyrimGraphics {
         )
     }
 
+    /** The Turnip driver picked for launches, or null for the one recommended for this GPU; used by every app. */
+    fun driver(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DRIVER, null)
+
+    fun setDriver(context: Context, driver: String?) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .apply { if (driver == null) remove(KEY_DRIVER) else putString(KEY_DRIVER, driver) }
+            .apply()
+    }
+
     fun saveLaunch(context: Context, launch: Launch) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .apply { if (launch.resolution == null) remove(KEY_RESOLUTION) else putString(KEY_RESOLUTION, launch.resolution) }

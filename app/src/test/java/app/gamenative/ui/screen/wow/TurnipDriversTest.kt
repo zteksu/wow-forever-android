@@ -97,4 +97,63 @@ class TurnipDriversTest {
         assertEquals("2026-09-19", releases[0].publishedAt)
         assertEquals(listOf("turnip_v32.zip"), releases[0].assets.map { it.name })
     }
+
+    private fun release(repo: String, tag: String, date: String, vararg assets: String, prerelease: Boolean = false) =
+        TurnipDrivers.Release(
+            repo = repo,
+            tag = tag,
+            title = tag,
+            publishedAt = date,
+            prerelease = prerelease,
+            notes = "",
+            assets = assets.map { TurnipDrivers.Asset(it, "https://github.com/$repo/releases/download/$tag/$it", 1) },
+        )
+
+    private fun downloaded(name: String, repo: String, tag: String, date: String, asset: String) =
+        TurnipDrivers.Installed(name, "", "", bundled = false, origin = TurnipDrivers.Origin(repo, tag, date, asset))
+
+    @Test
+    fun updates_offersTheNewestFullReleaseWithTheMatchingZip() {
+        val installed = listOf(
+            downloaded("Turnip A", "a/b", "v25.1", "2026-08-01", "turnip_v25.1.0_gen8.zip"),
+            TurnipDrivers.Installed("Turnip-V32-RP6sched", "", "", bundled = true),
+        )
+        val releases = listOf(
+            release("a/b", "v25.1", "2026-08-01", "turnip_v25.1.0_gen8.zip"),
+            release("a/b", "v25.2", "2026-10-01", "turnip_v25.2.1_gen7.zip", "turnip_v25.2.1_gen8.zip"),
+            release("a/b", "v26-rc", "2026-11-01", "turnip_v26.0.0_gen8.zip", prerelease = true),
+        )
+
+        val updates = TurnipDrivers.updates(installed, releases)
+
+        assertEquals(1, updates.size)
+        assertEquals("v25.2", updates[0].release.tag)
+        assertEquals("turnip_v25.2.1_gen8.zip", updates[0].asset.name)
+    }
+
+    @Test
+    fun updates_skipsUpToDateDriversAndOtherProjects() {
+        val installed = listOf(downloaded("Turnip A", "a/b", "v25.2", "2026-10-01", "turnip.zip"))
+
+        assertTrue(TurnipDrivers.updates(installed, listOf(release("a/b", "v25.2", "2026-10-01", "turnip.zip"))).isEmpty())
+        assertTrue(TurnipDrivers.updates(installed, listOf(release("c/d", "v30", "2026-11-01", "turnip.zip"))).isEmpty())
+    }
+
+    @Test
+    fun assetFamily_ignoresVersionsButKeepsGpuGenerations() {
+        assertEquals(TurnipDrivers.assetFamily("turnip_v25.1.0_gen8.zip"), TurnipDrivers.assetFamily("Turnip_v26.0_gen8.zip"))
+        assertTrue(TurnipDrivers.assetFamily("turnip_v25.1_gen7.zip") != TurnipDrivers.assetFamily("turnip_v25.1_gen8.zip"))
+    }
+
+    @Test
+    fun installed_readsWhereADownloadedDriverCameFrom() {
+        val dir = tempFolder.newFolder("drivers")
+        File(dir, "Turnip A").mkdirs()
+        File(dir, "Turnip A/meta.json").writeText(meta("Turnip A"))
+        File(dir, "Turnip A/origin.json").writeText("""{"repo":"a/b","tag":"v25.1","publishedAt":"2026-08-01","asset":"t.zip"}""")
+
+        val driver = TurnipDrivers.installed(dir, bundled).single()
+
+        assertEquals(TurnipDrivers.Origin("a/b", "v25.1", "2026-08-01", "t.zip"), driver.origin)
+    }
 }
