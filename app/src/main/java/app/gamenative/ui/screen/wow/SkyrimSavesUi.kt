@@ -71,8 +71,8 @@ fun ContinueCard(save: SkyrimSaves.Save, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth(0.85f)
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xCC0F1722))
-            .border(1.dp, Color(0xFF2A3A50), RoundedCornerShape(14.dp))
+            .background(Color(0xCC111522))
+            .border(1.dp, Color(0xFF303D59), RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(10.dp),
     ) {
@@ -88,7 +88,7 @@ fun ContinueCard(save: SkyrimSaves.Save, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(save.location, fontSize = 12.sp, color = Color(0xFFCBD5E1), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(save.location, fontSize = 12.sp, color = Color(0xFFB9C6DA), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${save.kind} · ${relativeTime(save.savedAt)}", fontSize = 11.sp, color = WowMuted)
         }
     }
@@ -99,7 +99,7 @@ private fun Thumbnail(image: ImageBitmap?, width: Int) {
     val modifier = Modifier
         .size(width = width.dp, height = (width * 9 / 16).dp)
         .clip(RoundedCornerShape(8.dp))
-        .background(Color(0xFF0B111A))
+        .background(Color(0xFF111522))
     if (image != null) {
         Image(bitmap = image, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier)
     } else {
@@ -188,7 +188,7 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
                             Text(
                                 DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(backup.createdAt)),
                                 fontSize = 13.sp,
-                                color = Color(0xFFE2E8F0),
+                                color = Color(0xFFDCE3EF),
                             )
                             Text(
                                 "${backup.saves.size} saves · ${backup.file.length() / (1024 * 1024)} MB",
@@ -207,7 +207,7 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
             Button(
                 onClick = { run("Backing up...", "Backed up") { SkyrimSaves.backUp(gameRoot, force = true) } },
                 enabled = !busy && !saves.isNullOrEmpty(),
-                colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                 shape = RoundedCornerShape(10.dp),
             ) {
                 Text("BACK UP NOW", fontWeight = FontWeight.Bold)
@@ -216,7 +216,7 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("CLOSE", color = WowMuted) }
         },
-        containerColor = Color(0xFF1B2838),
+        containerColor = Color(0xFF1E263B),
         shape = RoundedCornerShape(16.dp),
     )
 
@@ -229,7 +229,7 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
                     "Its ${backup.saves.size} saves go back into Saves/, replacing saves with the same name. " +
                         "Your current newest saves are backed up first, so you can undo this.",
                     fontSize = 13.sp,
-                    color = Color(0xFFE2E8F0),
+                    color = Color(0xFFDCE3EF),
                 )
             },
             confirmButton = {
@@ -238,11 +238,11 @@ fun SkyrimSavesDialog(gameRoot: File, onDismiss: () -> Unit, onChanged: () -> Un
                         confirmRestore = null
                         run("Restoring...", "Restored. Load it from the main menu.") { SkyrimSaves.restore(gameRoot, backup.file) }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                 ) { Text("RESTORE") }
             },
             dismissButton = { TextButton(onClick = { confirmRestore = null }) { Text("CANCEL", color = WowMuted) } },
-            containerColor = Color(0xFF1B2838),
+            containerColor = Color(0xFF1E263B),
         )
     }
 }
@@ -262,7 +262,7 @@ private fun SaveRow(save: SkyrimSaves.Save) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(save.location, fontSize = 12.sp, color = Color(0xFFCBD5E1), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(save.location, fontSize = 12.sp, color = Color(0xFFB9C6DA), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 "${save.kind} · ${relativeTime(save.savedAt)} · ${save.gameDate}",
                 fontSize = 11.sp,

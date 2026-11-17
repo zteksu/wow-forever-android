@@ -167,7 +167,7 @@ fun SkyrimGraphicsDialog(documentsDir: File?, skseInstalled: Boolean, recommende
             Button(
                 onClick = ::save,
                 enabled = ini != null,
-                colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                 shape = RoundedCornerShape(10.dp),
             ) {
                 Text("SAVE", fontWeight = FontWeight.Bold)
@@ -187,7 +187,7 @@ fun SkyrimGraphicsDialog(documentsDir: File?, skseInstalled: Boolean, recommende
                 Text("CANCEL", color = WowMuted)
             }
         },
-        containerColor = Color(0xFF1B2838),
+        containerColor = Color(0xFF1E263B),
         shape = RoundedCornerShape(16.dp),
     )
 }
@@ -212,7 +212,7 @@ private fun OptionRow(label: String, choices: List<String>, selected: String?, o
             .fillMaxWidth()
             .padding(vertical = 3.dp),
     ) {
-        Text(text = label, fontSize = 13.sp, color = Color(0xFFE2E8F0), modifier = Modifier.weight(0.4f))
+        Text(text = label, fontSize = 13.sp, color = Color(0xFFDCE3EF), modifier = Modifier.weight(0.4f))
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier
@@ -224,12 +224,12 @@ private fun OptionRow(label: String, choices: List<String>, selected: String?, o
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) WowBronze else Color(0xFF0F1722))
-                        .border(1.dp, if (isSelected) WowGold else Color(0xFF2A3A50), RoundedCornerShape(8.dp))
+                        .background(if (isSelected) WowBronze else Color(0xFF111522))
+                        .border(1.dp, if (isSelected) WowGold else Color(0xFF303D59), RoundedCornerShape(8.dp))
                         .clickable { onSelect(choice) }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 ) {
-                    Text(text = choice, fontSize = 12.sp, color = if (isSelected) Color.White else Color(0xFFCBD5E1))
+                    Text(text = choice, fontSize = 12.sp, color = if (isSelected) Color.White else Color(0xFFB9C6DA))
                 }
             }
         }

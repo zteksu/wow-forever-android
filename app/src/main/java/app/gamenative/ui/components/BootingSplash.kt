@@ -149,12 +149,12 @@ fun BootingSplash(
                                 fontSize = 32.sp,
                                 letterSpacing = 2.sp,
                                 shadow = Shadow(
-                                    color = Color(0xFFC7AF8E).copy(alpha = 0.6f),
+                                    color = Color(0xFF98A9C4).copy(alpha = 0.6f),
                                     offset = Offset(0f, 0f),
                                     blurRadius = 20f,
                                 ),
                                 brush = Brush.horizontalGradient(
-                                    colors = listOf(Color(0xFFF5E296), Color(0xFFE5C158), Color(0xFFC7AF8E)),
+                                    colors = listOf(Color(0xFFDCE3EF), Color(0xFFB9C6DA), Color(0xFF98A9C4)),
                                 ),
                             ),
                         )
@@ -229,12 +229,12 @@ private fun SpinnerSplash(progress: Float, showTitle: Boolean = true) {
             letterSpacing = 10.sp,
             shadow = Shadow(color = Color.Black.copy(alpha = 0.8f), offset = Offset(0f, 2f), blurRadius = 12f),
         ),
-        color = Color(0xFFE8E4DC),
+        color = Color(0xFFDCE3EF),
     )
 
     if (showTitle) Spacer(modifier = Modifier.height(28.dp))
 
-    val spinnerColor = Color(0xFFE8E4DC)
+    val spinnerColor = Color(0xFFDCE3EF)
     val trackColor = Color.White.copy(alpha = 0.15f)
     if (progress < 0f) {
         CircularProgressIndicator(

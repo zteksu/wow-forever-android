@@ -175,7 +175,7 @@ fun AddonsDialog(gameRoot: File, onDismiss: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF0D1420))
+                .background(Color(0xFF111522))
                 .padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -382,14 +382,14 @@ private fun AddonRow(
     onRemove: () -> Unit,
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF131D2E)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E263B)),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(addon.title, color = Color(0xFFF0E6D2), fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(addon.title, color = Color(0xFFDCE3EF), fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (addon.stars > 0) {
                         Spacer(Modifier.width(6.dp))
                         Icon(Icons.Default.Star, contentDescription = null, tint = WowGold, modifier = Modifier.size(14.dp))
@@ -435,7 +435,7 @@ private fun ActionButton(text: String, enabled: Boolean, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         enabled = enabled,
-        colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+        colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
     ) { Text(text, fontSize = 12.sp) }
 }
 
@@ -453,10 +453,10 @@ internal fun InstallProgress(label: String, progress: AddonManager.Progress?, st
             progress = { fraction.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().height(6.dp),
             color = WowGold,
-            trackColor = Color(0xFF2A3A50),
+            trackColor = Color(0xFF303D59),
         )
     } else {
-        LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(6.dp), color = WowGold, trackColor = Color(0xFF2A3A50))
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(6.dp), color = WowGold, trackColor = Color(0xFF303D59))
     }
     val details = listOfNotNull(
         fraction?.let { "${(it * 100).toInt()}%" },

@@ -114,7 +114,8 @@ private val LocalPluviaColors = staticCompositionLocalOf { DarkPluviaColors }
  */
 private val DarkColorScheme = darkColorScheme(
     primary = PluviaPrimary,
-    onPrimary = PluviaForeground,
+    // The primary is the palette's light Mist, so text on it is the dark Ink.
+    onPrimary = PluviaBackground,
     primaryContainer = PluviaPrimary.copy(alpha = 0.2f),
     onPrimaryContainer = PluviaForeground,
 

@@ -50,12 +50,12 @@ fun SessionSummaryDialog(summary: GameSessionStats.Summary, history: List<GameSe
                 summary.peakTempC?.let { Stat("Peak battery temp", "${it.roundToInt()} °C") }
                 Stat("Last 7 days", formatDuration(GameSessionStats.playTimeSec(history, 7)))
                 sessionTip(summary)?.let {
-                    Text(it, fontSize = 12.sp, color = Color(0xFFCBD5E1), modifier = Modifier.padding(top = 4.dp))
+                    Text(it, fontSize = 12.sp, color = Color(0xFFB9C6DA), modifier = Modifier.padding(top = 4.dp))
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("OK", color = WowGold) } },
-        containerColor = Color(0xFF1B2838),
+        containerColor = Color(0xFF1E263B),
         shape = RoundedCornerShape(16.dp),
     )
 }

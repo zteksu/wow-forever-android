@@ -27,21 +27,21 @@ val pluviaSeedColor = Color(0x284561FF)
  */
 
 // Brand
-val PluviaPrimary = Color(0xFFA21CAF)
+val PluviaPrimary = Color(0xFF98A9C4)
 val PluviaSeed = Color(0x284561FF)
 
 // Backgrounds
-val PluviaBackground = Color(0xFF09090B)
-val PluviaSurface = Color(0xFF12121A)
-val PluviaSurfaceElevated = Color(0xFF1A1A24)
-val PluviaCard = Color(0xFF09090B)
+val PluviaBackground = Color(0xFF111522)
+val PluviaSurface = Color(0xFF1E263B)
+val PluviaSurfaceElevated = Color(0xFF303D59)
+val PluviaCard = Color(0xFF111522)
 
 // Foregrounds
-val PluviaForeground = Color(0xFFFAFAFA)
-val PluviaForegroundMuted = Color(0xFF94969C)
+val PluviaForeground = Color(0xFFDCE3EF)
+val PluviaForegroundMuted = Color(0xFF98A9C4)
 
 // Secondary
-val PluviaSecondary = Color(0xFF27272A)
+val PluviaSecondary = Color(0xFF303D59)
 
 // Accents
 val PluviaCyan = Color(0xFF00D4FF)
@@ -55,7 +55,7 @@ val PluviaDanger = Color(0xFFEF4444)
 val PluviaDestructive = Color(0xFF7F1D1D)
 
 // Border
-val PluviaBorder = Color(0xFF3A3A4A)
+val PluviaBorder = Color(0xFF303D59)
 
 // Status - Installed/Download states
 val StatusInstalled = Color(0xFF4CAF50)
@@ -72,12 +72,21 @@ val FriendAwayOrSnooze = Color(0x806DCFF6)
 val FriendInGameAwayOrSnooze = Color(0x8090BA3C)
 val FriendBlocked = Color(0xFF983D3D)
 
-// WoW Forever
-val WowBackgroundGradient = listOf(Color(0xFF0A0E17), Color(0xFF10192A), Color(0xFF080C14))
-val WowGold = Color(0xFFC79C6E)
-val WowBronze = Color(0xFF9E7138)
-val WowMuted = Color(0xFF88A0C0)
-val WowSubtle = Color(0xFF7A92B0)
+// WoW Forever: a six-step navy palette, darkest to lightest.
+val PaletteInk = Color(0xFF111522)
+val PaletteNight = Color(0xFF1E263B)
+val PaletteSlate = Color(0xFF303D59)
+val PaletteSteel = Color(0xFF536684)
+val PaletteMist = Color(0xFF98A9C4)
+val PaletteFrost = Color(0xFFDCE3EF)
+
+val WowBackgroundGradient = listOf(PaletteInk, PaletteNight, PaletteInk)
+/** Headings, links and highlights (the old gold). */
+val WowGold = PaletteFrost
+/** Filled action buttons (the old bronze). */
+val WowBronze = PaletteSteel
+val WowMuted = PaletteMist
+val WowSubtle = Color(0xFF8394B1)
 val WowError = Color(0xFFFC8181)
 
 // Compatibility

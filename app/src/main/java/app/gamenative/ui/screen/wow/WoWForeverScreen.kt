@@ -61,6 +61,9 @@ import app.gamenative.ui.screen.wow.WowClientDownloader.TARGET_PRODUCT
 import app.gamenative.ui.components.GameBackdrop
 import app.gamenative.ui.screen.xserver.FPS_LIMITER_ENABLED_EXTRA
 import app.gamenative.ui.screen.xserver.FPS_LIMITER_TARGET_EXTRA
+import app.gamenative.ui.theme.PaletteFrost
+import app.gamenative.ui.theme.PaletteInk
+import app.gamenative.ui.theme.PaletteSlate
 import app.gamenative.ui.theme.WowBronze
 import app.gamenative.ui.theme.WowError
 import app.gamenative.ui.theme.WowGold
@@ -482,7 +485,7 @@ fun WoWForeverScreen(
                     fontWeight = FontWeight.Black,
                     fontFamily = FontFamily.Serif,
                     letterSpacing = 3.sp,
-                    color = Color(0xFFF0E6D2)
+                    color = Color(0xFFDCE3EF)
                 )
                 Text(
                     text = BuildConfig.LAUNCHER_SUBTITLE,
@@ -508,8 +511,8 @@ fun WoWForeverScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.9f)
-                    .border(1.dp, Color(0xFF2A3C54), RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF131D2E).copy(alpha = 0.85f)),
+                    .border(1.dp, Color(0xFF303D59), RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E263B).copy(alpha = 0.85f)),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
@@ -565,7 +568,7 @@ fun WoWForeverScreen(
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = Color(0xFF1E2D44))
+                    HorizontalDivider(color = Color(0xFF1E263B))
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(text = "Target Path: $gamePath", fontSize = 11.sp, color = WowSubtle, maxLines = 2)
@@ -647,7 +650,7 @@ fun WoWForeverScreen(
                                 "Tap Update below to download the latest files directly from Blizzard's CDN over Wi-Fi."
                             },
                             fontSize = 11.sp,
-                            color = Color(0xFFCBD5E1)
+                            color = Color(0xFFB9C6DA)
                         )
                     }
                 }
@@ -659,7 +662,7 @@ fun WoWForeverScreen(
                     modifier = Modifier
                         .fillMaxWidth(0.9f)
                         .border(1.dp, WowGold.copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2838).copy(alpha = 0.85f)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E263B).copy(alpha = 0.85f)),
                     shape = RoundedCornerShape(16.dp),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -672,7 +675,7 @@ fun WoWForeverScreen(
                         Text(
                             text = "A new release is available on GitHub. Tap below to view notes and update.",
                             fontSize = 12.sp,
-                            color = Color(0xFFCBD5E1),
+                            color = Color(0xFFB9C6DA),
                             lineHeight = 16.sp,
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -712,7 +715,7 @@ fun WoWForeverScreen(
                             else -> "Checking for game updates..."
                         },
                         fontSize = 13.sp,
-                        color = Color(0xFFE2E8F0),
+                        color = Color(0xFFDCE3EF),
                         textAlign = TextAlign.Center
                     )
                 } else {
@@ -953,14 +956,14 @@ fun WoWForeverScreen(
                         "the game data you already have, so only the new ARM64 client downloads (about 100 MB).\n\n" +
                         "Already copied the full release from a PC? Choose that folder instead.",
                     fontSize = 13.sp,
-                    color = Color(0xFFE2E8F0),
+                    color = Color(0xFFDCE3EF),
                     lineHeight = 18.sp,
                 )
             },
             confirmButton = {
                 Button(
                     onClick = ::performInstall,
-                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                     shape = RoundedCornerShape(10.dp),
                 ) {
                     Text("UPGRADE NOW", fontWeight = FontWeight.Bold)
@@ -979,7 +982,7 @@ fun WoWForeverScreen(
                     }
                 }
             },
-            containerColor = Color(0xFF1B2838),
+            containerColor = Color(0xFF1E263B),
             shape = RoundedCornerShape(16.dp),
         )
     }
@@ -992,7 +995,7 @@ fun WoWForeverScreen(
                 Text(
                     text = "Android requires 'All files access' for ${BuildConfig.GAME_NAME} to read and update game files in this directory.\n\nPlease enable 'Allow access to manage all files' on the next screen.",
                     fontSize = 13.sp,
-                    color = Color(0xFFE2E8F0),
+                    color = Color(0xFFDCE3EF),
                     lineHeight = 18.sp
                 )
             },
@@ -1002,7 +1005,7 @@ fun WoWForeverScreen(
                         showStoragePermissionDialog = false
                         StorageUtils.requestManageExternalStoragePermission(context)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("OPEN SETTINGS", fontWeight = FontWeight.Bold)
@@ -1013,7 +1016,7 @@ fun WoWForeverScreen(
                     Text("CANCEL", color = WowMuted)
                 }
             },
-            containerColor = Color(0xFF1B2838),
+            containerColor = Color(0xFF1E263B),
             shape = RoundedCornerShape(16.dp),
         )
     }
@@ -1038,7 +1041,7 @@ fun WoWForeverScreen(
                             Text(
                                 text = renderReleaseNotes(update.notes),
                                 fontSize = 12.sp,
-                                color = Color(0xFFCBD5E1),
+                                color = Color(0xFFB9C6DA),
                                 lineHeight = 16.sp,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1067,7 +1070,7 @@ fun WoWForeverScreen(
                     Button(
                         onClick = ::performAppUpdate,
                         enabled = !isDownloadingAppUpdate,
-                        colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                        colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                         shape = RoundedCornerShape(10.dp),
                     ) {
                         Text(
@@ -1087,7 +1090,7 @@ fun WoWForeverScreen(
                         }
                     }
                 },
-                containerColor = Color(0xFF1B2838),
+                containerColor = Color(0xFF1E263B),
                 shape = RoundedCornerShape(16.dp),
             )
         }
@@ -1108,7 +1111,7 @@ fun WoWForeverScreen(
                 Text(
                     text = "Android requires permission to install apps from ${BuildConfig.GAME_NAME}.\n\nPlease enable 'Allow from this source' on the next screen.",
                     fontSize = 13.sp,
-                    color = Color(0xFFE2E8F0),
+                    color = Color(0xFFDCE3EF),
                     lineHeight = 18.sp,
                 )
             },
@@ -1119,7 +1122,7 @@ fun WoWForeverScreen(
                         pendingInstallPermission = true
                         AppUpdater.openInstallPermissionSettings(context)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                     shape = RoundedCornerShape(10.dp),
                 ) {
                     Text("OPEN SETTINGS", fontWeight = FontWeight.Bold)
@@ -1130,7 +1133,7 @@ fun WoWForeverScreen(
                     Text("CANCEL", color = WowMuted)
                 }
             },
-            containerColor = Color(0xFF1B2838),
+            containerColor = Color(0xFF1E263B),
             shape = RoundedCornerShape(16.dp),
         )
     }
@@ -1270,7 +1273,7 @@ private fun InstallCard(isUpgrade: Boolean, gamePath: String, freeSpaceBytes: Lo
         modifier = Modifier
             .fillMaxWidth(0.9f)
             .border(1.dp, WowGold.copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2838).copy(alpha = 0.85f)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E263B).copy(alpha = 0.85f)),
         shape = RoundedCornerShape(16.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1289,7 +1292,7 @@ private fun InstallCard(isUpgrade: Boolean, gamePath: String, freeSpaceBytes: Lo
                         "game streams in as you play and can grow past 50 GB, so pick a location with room to spare."
                 },
                 fontSize = 12.sp,
-                color = Color(0xFFCBD5E1),
+                color = Color(0xFFB9C6DA),
                 lineHeight = 16.sp,
             )
             Spacer(modifier = Modifier.height(10.dp))
@@ -1321,7 +1324,13 @@ private fun PrimaryButton(text: String, icon: ImageVector, enabled: Boolean, onC
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(0.85f).height(56.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+        // The palette's lightest swatch with its darkest for text, so Play is the brightest thing on screen.
+        colors = ButtonDefaults.buttonColors(
+            containerColor = PaletteFrost,
+            contentColor = PaletteInk,
+            disabledContainerColor = PaletteSlate,
+            disabledContentColor = WowMuted,
+        ),
         shape = RoundedCornerShape(14.dp)
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
@@ -1377,7 +1386,7 @@ private fun CheckItem(label: String, ready: Boolean) {
             modifier = Modifier.size(18.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
-        Text(text = label, fontSize = 13.sp, color = if (ready) Color(0xFFCBD5E1) else Color(0xFFED8936))
+        Text(text = label, fontSize = 13.sp, color = if (ready) Color(0xFFB9C6DA) else Color(0xFFED8936))
     }
 }
 

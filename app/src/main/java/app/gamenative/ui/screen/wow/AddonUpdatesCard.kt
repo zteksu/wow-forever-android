@@ -64,8 +64,8 @@ fun AddonUpdatesCard(gameRoot: File, enabled: Boolean, modifier: Modifier = Modi
         modifier = modifier
             .fillMaxWidth(0.85f)
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xCC0F1722))
-            .border(1.dp, Color(0xFF2A3A50), RoundedCornerShape(14.dp))
+            .background(Color(0xCC111522))
+            .border(1.dp, Color(0xFF303D59), RoundedCornerShape(14.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         when {
@@ -83,7 +83,7 @@ fun AddonUpdatesCard(gameRoot: File, enabled: Boolean, modifier: Modifier = Modi
                     Text(
                         updates.joinToString { it.title },
                         fontSize = 12.sp,
-                        color = Color(0xFFCBD5E1),
+                        color = Color(0xFFB9C6DA),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

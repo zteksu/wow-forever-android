@@ -148,8 +148,8 @@ private fun DriverRow(title: String, subtitle: String, isSelected: Boolean, onCl
             .fillMaxWidth()
             .padding(vertical = 2.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) WowBronze.copy(alpha = 0.35f) else Color(0xFF0F1722))
-            .border(1.dp, if (isSelected) WowGold else Color(0xFF2A3A50), RoundedCornerShape(8.dp))
+            .background(if (isSelected) WowBronze.copy(alpha = 0.35f) else Color(0xFF111522))
+            .border(1.dp, if (isSelected) WowGold else Color(0xFF303D59), RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
@@ -211,12 +211,12 @@ internal fun DriverDownloadDialog(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) WowBronze else Color(0xFF0F1722))
-                                .border(1.dp, if (isSelected) WowGold else Color(0xFF2A3A50), RoundedCornerShape(8.dp))
+                                .background(if (isSelected) WowBronze else Color(0xFF111522))
+                                .border(1.dp, if (isSelected) WowGold else Color(0xFF303D59), RoundedCornerShape(8.dp))
                                 .clickable(enabled = installing == null) { source = s }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                         ) {
-                            Text(s.label, fontSize = 12.sp, color = if (isSelected) Color.White else Color(0xFFCBD5E1))
+                            Text(s.label, fontSize = 12.sp, color = if (isSelected) Color.White else Color(0xFFB9C6DA))
                         }
                     }
                 }
@@ -243,14 +243,14 @@ internal fun DriverDownloadDialog(
                             Text("${release.tag} · ${release.publishedAt}", fontSize = 11.sp, color = WowMuted)
                             val notes = release.notes.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.take(3).joinToString(" ")
                             if (notes.isNotEmpty()) {
-                                Text(notes, fontSize = 11.sp, color = Color(0xFFCBD5E1), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                Text(notes, fontSize = 11.sp, color = Color(0xFFB9C6DA), maxLines = 3, overflow = TextOverflow.Ellipsis)
                             }
                             for (asset in release.assets) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                     Text(
                                         "${asset.name} · ${asset.size / (1024 * 1024)} MB",
                                         fontSize = 12.sp,
-                                        color = Color(0xFFE2E8F0),
+                                        color = Color(0xFFDCE3EF),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f),
@@ -284,7 +284,7 @@ internal fun DriverDownloadDialog(
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = installing == null) { Text("CLOSE", color = WowMuted) }
         },
-        containerColor = Color(0xFF1B2838),
+        containerColor = Color(0xFF1E263B),
         shape = RoundedCornerShape(16.dp),
     )
 }
@@ -370,7 +370,7 @@ fun DriversDialog(recommended: String, gpuLabel: String, adreno8xx: Boolean, onD
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF0F1722))
+                        .background(Color(0xFF111522))
                         .border(1.dp, WowGold, RoundedCornerShape(10.dp))
                         .padding(10.dp),
                 ) {
@@ -380,7 +380,7 @@ fun DriversDialog(recommended: String, gpuLabel: String, adreno8xx: Boolean, onD
                         inUse?.origin?.let { "${it.tag} from ${it.repo.substringBefore('/')}" },
                         if (usingRecommended) "recommended for $gpuLabel" else "your pick",
                     )
-                    Text(details.joinToString(" · "), fontSize = 12.sp, color = Color(0xFFCBD5E1))
+                    Text(details.joinToString(" · "), fontSize = 12.sp, color = Color(0xFFB9C6DA))
                     inUse?.description?.takeIf { it.isNotBlank() }?.let {
                         Text(it, fontSize = 11.sp, color = WowMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
@@ -439,7 +439,7 @@ fun DriversDialog(recommended: String, gpuLabel: String, adreno8xx: Boolean, onD
                                     Text(
                                         "Newest from ${source.label}: ${latest.title} (${latest.publishedAt})",
                                         fontSize = 12.sp,
-                                        color = Color(0xFFCBD5E1),
+                                        color = Color(0xFFB9C6DA),
                                         modifier = Modifier.weight(1f),
                                     )
                                     TextButton(onClick = { showDownloads = true }, enabled = updating == null) {
@@ -478,7 +478,7 @@ fun DriversDialog(recommended: String, gpuLabel: String, adreno8xx: Boolean, onD
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = updating == null) { Text("CLOSE", color = WowMuted) }
         },
-        containerColor = Color(0xFF1B2838),
+        containerColor = Color(0xFF1E263B),
         shape = RoundedCornerShape(16.dp),
     )
 

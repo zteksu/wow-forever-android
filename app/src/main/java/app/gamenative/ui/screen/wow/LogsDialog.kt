@@ -75,7 +75,7 @@ fun LogsDialog(onDismiss: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 420.dp)
-                    .background(Color(0xFF0F1722), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF111522), RoundedCornerShape(8.dp))
                     .verticalScroll(rememberScrollState())
                     .horizontalScroll(rememberScrollState())
                     .padding(10.dp),
@@ -85,7 +85,7 @@ fun LogsDialog(onDismiss: () -> Unit) {
                     fontFamily = FontFamily.Monospace,
                     fontSize = 10.sp,
                     lineHeight = 13.sp,
-                    color = Color(0xFFCBD5E1),
+                    color = Color(0xFFB9C6DA),
                 )
             }
         },
@@ -100,7 +100,7 @@ fun LogsDialog(onDismiss: () -> Unit) {
                     }
                 },
                 enabled = report != null,
-                colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                 shape = RoundedCornerShape(10.dp),
             ) {
                 Text("SAVE .TXT", fontWeight = FontWeight.Bold)
@@ -128,7 +128,7 @@ fun LogsDialog(onDismiss: () -> Unit) {
                 Text("CLOSE", color = WowMuted)
             }
         },
-        containerColor = Color(0xFF1B2838),
+        containerColor = Color(0xFF1E263B),
         shape = RoundedCornerShape(16.dp),
     )
 }

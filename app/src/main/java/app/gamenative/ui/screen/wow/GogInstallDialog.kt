@@ -92,7 +92,7 @@ fun GogInstallDialog(marker: String, onInstalled: (File) -> Unit, onDismiss: () 
                     "Use the offline installer from your GOG library (setup_….exe with its .bin files in the same folder). " +
                         "It's unpacked directly on the device, without running the Windows installer.",
                     fontSize = 12.sp,
-                    color = Color(0xFFCBD5E1),
+                    color = Color(0xFFB9C6DA),
                 )
                 Spacer(Modifier.height(10.dp))
 
@@ -156,7 +156,7 @@ fun GogInstallDialog(marker: String, onInstalled: (File) -> Unit, onDismiss: () 
                         GogInstaller.reset()
                         onDismiss()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                     shape = RoundedCornerShape(10.dp),
                 ) { Text("DONE", fontWeight = FontWeight.Bold) }
                 else -> Button(
@@ -166,7 +166,7 @@ fun GogInstallDialog(marker: String, onInstalled: (File) -> Unit, onDismiss: () 
                         GogInstaller.install(context, installer, chosen, BuildConfig.DEFAULT_GAME_FOLDER, marker)
                     },
                     enabled = exe != null && destination != null,
-                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = WowGold),
                     shape = RoundedCornerShape(10.dp),
                 ) { Text("INSTALL", fontWeight = FontWeight.Bold) }
             }
@@ -179,7 +179,7 @@ fun GogInstallDialog(marker: String, onInstalled: (File) -> Unit, onDismiss: () 
                 }) { Text("CLOSE", color = WowMuted) }
             }
         },
-        containerColor = Color(0xFF1B2838),
+        containerColor = Color(0xFF1E263B),
         shape = RoundedCornerShape(16.dp),
     )
 }
