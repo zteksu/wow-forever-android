@@ -309,19 +309,46 @@ object AddonManager {
 
     // ---- Install / remove ----
 
+    /**
+     * How far an install has got: [fraction] of the whole job (dependencies included), or null while the size is
+     * unknown, and [bytes] of [totalBytes] downloaded for the add-on in progress (totalBytes is -1 when unknown).
+     */
+    data class Progress(val fraction: Float?, val step: String, val bytes: Long = 0, val totalBytes: Long = -1)
+
     /** Installs [addon] and any catalog addons it requires that aren't installed yet. */
-    fun install(context: Context, gameRoot: File, addon: Addon, catalog: List<Addon>, onStatus: (String) -> Unit) {
+    fun install(
+        context: Context,
+        gameRoot: File,
+        addon: Addon,
+        catalog: List<Addon>,
+        onStatus: (String) -> Unit,
+        onProgress: (Progress) -> Unit = {},
+    ) {
         val required = if (addon.curseModId != 0) {
             CurseForge.requiredDependencies(context, addon)
         } else {
             addon.dependencies.mapNotNull { dep -> catalog.firstOrNull { it.name.equals(dep, ignoreCase = true) } }
         }
         val missing = required.filter { state(context, gameRoot, it) == State.NOT_INSTALLED }
-        for (dependency in missing) installOne(context, gameRoot, dependency, onStatus)
-        installOne(context, gameRoot, addon, onStatus)
+        val all = missing + addon
+        all.forEachIndexed { index, item ->
+            // Each add-on is an equal share of the bar: its download, then its unpacking.
+            installOne(context, gameRoot, item, onStatus) { part, step, bytes, total ->
+                onProgress(Progress(part?.let { (index + it) / all.size }, step, bytes, total))
+            }
+        }
     }
 
-    private fun installOne(context: Context, gameRoot: File, addon: Addon, onStatus: (String) -> Unit) {
+    /** The share of one add-on's bar its download takes; unpacking takes the rest. */
+    private const val DOWNLOAD_SHARE = 0.85f
+
+    private fun installOne(
+        context: Context,
+        gameRoot: File,
+        addon: Addon,
+        onStatus: (String) -> Unit,
+        onProgress: (part: Float?, step: String, bytes: Long, totalBytes: Long) -> Unit = { _, _, _, _ -> },
+    ) {
         val url = if (addon.curseModId != 0) {
             CurseForge.downloadUrl(context, addon)
         } else if (addon.releaseFile.isNotEmpty()) {
@@ -335,10 +362,34 @@ object AddonManager {
             Net.http.newCall(Request.Builder().url(url).build()).execute().use { response ->
                 if (!response.isSuccessful) throw IOException("HTTP ${response.code} downloading ${addon.title}")
                 val body = response.body ?: throw IOException("Empty download for ${addon.title}")
-                zip.outputStream().use { body.byteStream().copyTo(it) }
+                val total = body.contentLength()
+                val step = "Downloading ${addon.title}"
+                onProgress(if (total > 0) 0f else null, step, 0, total)
+                zip.outputStream().use { out ->
+                    body.byteStream().use { input ->
+                        val buffer = ByteArray(64 * 1024)
+                        var done = 0L
+                        var lastReport = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            out.write(buffer, 0, read)
+                            done += read
+                            // About every 64 KB is plenty for a smooth bar without flooding the UI.
+                            if (done - lastReport >= buffer.size || done == total) {
+                                lastReport = done
+                                onProgress(if (total > 0) DOWNLOAD_SHARE * done / total else null, step, done, total)
+                            }
+                        }
+                    }
+                }
             }
             onStatus("Installing ${addon.title}...")
-            val folders = extractAddon(zip, addonsDir(gameRoot), addon.name)
+            val unpack = "Unpacking ${addon.title}"
+            onProgress(DOWNLOAD_SHARE, unpack, 0, -1)
+            val folders = extractAddon(zip, addonsDir(gameRoot), addon.name) { part ->
+                onProgress(DOWNLOAD_SHARE + (1 - DOWNLOAD_SHARE) * part, unpack, 0, -1)
+            }
             saveRecord(context, addon.name, Record(addon.lastUpdated, folders))
             Timber.i("Installed addon ${addon.name} into $folders")
         } finally {
@@ -368,7 +419,12 @@ object AddonManager {
         RegexOption.IGNORE_CASE,
     )
 
-    internal fun extractAddon(zipFile: File, addonsDir: File, preferredName: String): List<String> {
+    internal fun extractAddon(
+        zipFile: File,
+        addonsDir: File,
+        preferredName: String,
+        onProgress: (Float) -> Unit = {},
+    ): List<String> {
         ZipFile(zipFile).use { zip ->
             val entries = zip.entries().toList().filterNot { it.name.contains("..") || it.name.startsWith("/") }
             val prefix = entries.map { it.name.substringBefore('/', "") + "/" }.distinct().singleOrNull()
@@ -395,9 +451,12 @@ object AddonManager {
             addonsDir.mkdirs()
             val staging = File(addonsDir, ".install-tmp").apply { deleteRecursively(); mkdirs() }
             try {
+                var extracted = 0
+                val count = (entries.size * roots.size).coerceAtLeast(1)
                 for ((sub, folder) in roots) {
                     val target = File(staging, folder)
                     for (entry in entries) {
+                        if (++extracted % 25 == 0) onProgress(extracted.toFloat() / count)
                         val relative = entry.name.removePrefix(prefix)
                         if (!relative.startsWith(sub) || relative == sub) continue
                         val out = File(target, relative.removePrefix(sub))
