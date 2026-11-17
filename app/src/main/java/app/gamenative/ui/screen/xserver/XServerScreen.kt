@@ -109,6 +109,7 @@ import app.gamenative.ui.component.parsePositiveFpsLimit
 import app.gamenative.ui.data.PerformanceHudConfig
 import app.gamenative.ui.data.PerformanceHudSize
 import app.gamenative.ui.data.XServerState
+import app.gamenative.ui.screen.wow.WowMachineIdentity
 import app.gamenative.ui.widget.PerformanceHudView
 import app.gamenative.utils.AssetUtils
 import app.gamenative.utils.ContainerUtils
@@ -1100,14 +1101,17 @@ fun XServerScreen(
         }
     }
 
-    val dismissOverlayMenu: () -> Unit = dismiss@{
-        if (SystemClock.uptimeMillis() - quickMenuOpenedAt < QUICK_MENU_DUPLICATE_BACK_MS) return@dismiss
+    val dismissOverlayMenu: () -> Unit = {
         if (!keyboardRequestedFromOverlay) {
             imeInputReceiver?.hideKeyboard()
         }
         shouldForceResumeOnMenuClose = keyboardRequestedFromOverlay && manualResumeMode && !keepPausedForEditor
         keyboardRequestedFromOverlay = false
         showQuickMenu = false
+    }
+
+    val dismissOverlayMenuOnBack: () -> Unit = {
+        if (SystemClock.uptimeMillis() - quickMenuOpenedAt >= QUICK_MENU_DUPLICATE_BACK_MS) dismissOverlayMenu()
     }
 
     LaunchedEffect(showQuickMenu, quickMenuToolsVisible, xServerView) {
@@ -1388,7 +1392,7 @@ fun XServerScreen(
         }
 
         if (showQuickMenu) {
-            dismissOverlayMenu()
+            dismissOverlayMenuOnBack()
             return@gameBack
         }
 
@@ -2209,6 +2213,8 @@ fun XServerScreen(
                                     onExtractFileListener,
                                 )
                             }
+                            // After the prefix setup above, which can re-extract a stock system.reg.
+                            WowMachineIdentity.load(context).applyTo(File(container.rootDir, ".wine"))
 
                             runBlocking {
                                 extractGraphicsDriverFiles(
@@ -2713,6 +2719,7 @@ fun XServerScreen(
         QuickMenu(
             isVisible = showQuickMenu,
             onDismiss = dismissOverlayMenu,
+            onBack = dismissOverlayMenuOnBack,
             onItemSelected = onQuickMenuItemSelected,
             renderer = xServerView?.renderer as? VulkanRenderer,
             glRenderer = xServerView?.renderer as? GLRenderer,
